@@ -1,0 +1,539 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated member profile, wallet balances, referral metadata, and Mobile Money withdrawal configuration.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 30
+        },
+        "withdrawalCountry": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "withdrawalMethod": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "withdrawalAccount": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 80
+        },
+        "withdrawalHolder": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "balance": {
+          "type": "number"
+        },
+        "totalInvested": {
+          "type": "number"
+        },
+        "totalEarned": {
+          "type": "number"
+        },
+        "referralCode": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referredBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "referralBonus": {
+          "type": "number"
+        },
+        "referralCount": {
+          "type": "number"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "admin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "balance",
+        "totalInvested",
+        "totalEarned",
+        "referralCode",
+        "role",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Trusted administrator lookup document.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "VIP agro-industrial investment tier (shea & cashew value chain).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "description": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 1000
+        },
+        "location": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "returnRate": {
+          "type": "number"
+        },
+        "durationDays": {
+          "type": "number"
+        },
+        "minInvestment": {
+          "type": "number"
+        },
+        "dailyIncome": {
+          "type": "number"
+        },
+        "targetAmount": {
+          "type": "number"
+        },
+        "raisedAmount": {
+          "type": "number"
+        },
+        "investorsCount": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "paused"]
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public", "private"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "category",
+        "description",
+        "location",
+        "imageUrl",
+        "returnRate",
+        "durationDays",
+        "minInvestment",
+        "dailyIncome",
+        "targetAmount",
+        "raisedAmount",
+        "investorsCount",
+        "status",
+        "visibility",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Investment": {
+      "title": "Investment",
+      "description": "Active or expired 90-day VIP contract owned by a member.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "projectTitle": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "projectCategory": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "amount": {
+          "type": "number"
+        },
+        "dailyIncome": {
+          "type": "number"
+        },
+        "returnRate": {
+          "type": "number"
+        },
+        "expectedProfit": {
+          "type": "number"
+        },
+        "durationDays": {
+          "type": "number"
+        },
+        "daysCredited": {
+          "type": "number"
+        },
+        "totalEarnedSoFar": {
+          "type": "number"
+        },
+        "purchasedAtMs": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "completed", "expired", "cancelled"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "userName",
+        "projectId",
+        "projectTitle",
+        "projectCategory",
+        "amount",
+        "dailyIncome",
+        "returnRate",
+        "expectedProfit",
+        "durationDays",
+        "daysCredited",
+        "totalEarnedSoFar",
+        "purchasedAtMs",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial ledger record for deposits, withdrawals, VIP purchases, daily payouts, credits, and referral bonuses.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "type": {
+          "type": "string",
+          "enum": ["deposit", "withdrawal", "investment", "payout", "credit", "referral"]
+        },
+        "amount": {
+          "type": "number"
+        },
+        "method": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "phoneOrAccount": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected", "completed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "userName",
+        "type",
+        "amount",
+        "method",
+        "phoneOrAccount",
+        "reference",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Referral": {
+      "title": "Referral",
+      "description": "3-level team referral relationship and accumulated commission.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referrerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referredUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referredName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "level": {
+          "type": "number"
+        },
+        "commissionEarned": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "rewarded"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "referrerUid",
+        "referredUid",
+        "referredName",
+        "commissionEarned",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global platform configuration and announcement banner.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referralRate": {
+          "type": "number"
+        },
+        "minDeposit": {
+          "type": "number"
+        },
+        "minWithdrawal": {
+          "type": "number"
+        },
+        "supportPhone": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 50
+        },
+        "supportEmail": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "adminPhone": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 50
+        },
+        "announcement": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 300
+        },
+        "allowMultipleSameVip": {
+          "type": "boolean"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "referralRate",
+        "minDeposit",
+        "minWithdrawal",
+        "supportPhone",
+        "supportEmail",
+        "adminPhone",
+        "announcement",
+        "allowMultipleSameVip",
+        "visibility",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Member profiles, balances, and withdrawal details (owner or admin only)."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Trusted administrator registry."
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "VIP agro-industrial product catalog."
+    },
+    "/investments/{investmentId}": {
+      "schema": { "$ref": "#/entities/Investment" },
+      "description": "Member VIP contracts with 90-day daily payout tracking."
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Financial ledger entries for deposits, withdrawals, investments, payouts, credits, and referrals."
+    },
+    "/referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/Referral" },
+      "description": "Referral relationships and earned commissions."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Global platform configuration."
+    }
+  }
+}

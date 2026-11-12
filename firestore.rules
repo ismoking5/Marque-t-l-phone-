@@ -1,0 +1,373 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'ismailasawadogo10@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUser(data) {
+      return data.keys().hasAll([
+        'uid', 'email', 'displayName', 'balance', 'totalInvested',
+        'totalEarned', 'referralCode', 'role', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'uid', 'email', 'displayName', 'phone',
+        'withdrawalCountry', 'withdrawalMethod', 'withdrawalAccount', 'withdrawalHolder',
+        'balance', 'totalInvested', 'totalEarned',
+        'referralCode', 'referredBy', 'referralBonus', 'referralCount',
+        'role', 'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.uid)
+      && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+      && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+      && (!('phone' in data) || (data.phone is string && data.phone.size() <= 30))
+      && (!('withdrawalCountry' in data) || (data.withdrawalCountry is string && data.withdrawalCountry.size() >= 2 && data.withdrawalCountry.size() <= 60))
+      && (!('withdrawalMethod' in data) || (data.withdrawalMethod is string && data.withdrawalMethod.size() >= 2 && data.withdrawalMethod.size() <= 60))
+      && (!('withdrawalAccount' in data) || (data.withdrawalAccount is string && data.withdrawalAccount.size() >= 4 && data.withdrawalAccount.size() <= 80))
+      && (!('withdrawalHolder' in data) || (data.withdrawalHolder is string && data.withdrawalHolder.size() >= 2 && data.withdrawalHolder.size() <= 100))
+      && data.balance is number && data.balance >= 0
+      && data.totalInvested is number && data.totalInvested >= 0
+      && data.totalEarned is number && data.totalEarned >= 0
+      && isValidId(data.referralCode)
+      && (!('referredBy' in data) || (data.referredBy is string && data.referredBy.size() <= 128))
+      && (!('referralBonus' in data) || (data.referralBonus is number && data.referralBonus >= 0))
+      && (!('referralCount' in data) || (data.referralCount is number && data.referralCount >= 0))
+      && data.role in ['user', 'admin']
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll([
+        'id', 'title', 'category', 'description', 'location', 'imageUrl',
+        'returnRate', 'durationDays', 'minInvestment', 'dailyIncome',
+        'targetAmount', 'raisedAmount', 'investorsCount', 'status', 'visibility',
+        'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'title', 'category', 'description', 'location', 'imageUrl',
+        'returnRate', 'durationDays', 'minInvestment', 'dailyIncome',
+        'targetAmount', 'raisedAmount', 'investorsCount', 'status', 'visibility',
+        'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.id)
+      && data.title is string && data.title.size() >= 2 && data.title.size() <= 120
+      && data.category is string && data.category.size() >= 2 && data.category.size() <= 60
+      && data.description is string && data.description.size() >= 5 && data.description.size() <= 1000
+      && data.location is string && data.location.size() >= 2 && data.location.size() <= 100
+      && data.imageUrl is string && data.imageUrl.size() >= 1 && data.imageUrl.size() <= 500
+      && data.returnRate is number && data.returnRate >= 1 && data.returnRate <= 5000
+      && data.durationDays is number && data.durationDays >= 1 && data.durationDays <= 3650
+      && data.minInvestment is number && data.minInvestment >= 500
+      && data.dailyIncome is number && data.dailyIncome >= 50
+      && data.targetAmount is number && data.targetAmount >= 1000
+      && data.raisedAmount is number && data.raisedAmount >= 0
+      && data.investorsCount is number && data.investorsCount >= 0
+      && data.status in ['active', 'paused']
+      && data.visibility in ['public', 'private']
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidInvestment(data) {
+      return data.keys().hasAll([
+        'id', 'userId', 'userName', 'projectId', 'projectTitle', 'projectCategory',
+        'amount', 'dailyIncome', 'returnRate', 'expectedProfit', 'durationDays',
+        'daysCredited', 'totalEarnedSoFar', 'purchasedAtMs', 'status', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'userId', 'userName', 'projectId', 'projectTitle', 'projectCategory',
+        'amount', 'dailyIncome', 'returnRate', 'expectedProfit', 'durationDays',
+        'daysCredited', 'totalEarnedSoFar', 'purchasedAtMs', 'status', 'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.id)
+      && isValidId(data.userId)
+      && data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100
+      && isValidId(data.projectId)
+      && data.projectTitle is string && data.projectTitle.size() >= 2 && data.projectTitle.size() <= 120
+      && data.projectCategory is string && data.projectCategory.size() >= 2 && data.projectCategory.size() <= 60
+      && data.amount is number && data.amount >= 500
+      && data.dailyIncome is number && data.dailyIncome >= 50
+      && data.returnRate is number && data.returnRate >= 1
+      && data.expectedProfit is number && data.expectedProfit >= 50
+      && data.durationDays is number && data.durationDays >= 1 && data.durationDays <= 3650
+      && data.daysCredited is number && data.daysCredited >= 0
+      && data.totalEarnedSoFar is number && data.totalEarnedSoFar >= 0
+      && data.purchasedAtMs is number && data.purchasedAtMs > 0
+      && data.status in ['active', 'completed', 'expired', 'cancelled']
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll([
+        'id', 'userId', 'userName', 'type', 'amount', 'method',
+        'phoneOrAccount', 'reference', 'status', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'userId', 'userName', 'type', 'amount', 'method',
+        'phoneOrAccount', 'reference', 'status', 'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.id)
+      && isValidId(data.userId)
+      && data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100
+      && data.type in ['deposit', 'withdrawal', 'investment', 'payout', 'credit', 'referral']
+      && data.amount is number && data.amount > 0
+      && data.method is string && data.method.size() >= 2 && data.method.size() <= 60
+      && data.phoneOrAccount is string && data.phoneOrAccount.size() >= 2 && data.phoneOrAccount.size() <= 80
+      && data.reference is string && data.reference.size() >= 2 && data.reference.size() <= 100
+      && data.status in ['pending', 'approved', 'rejected', 'completed']
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidReferral(data) {
+      return data.keys().hasAll([
+        'id', 'referrerUid', 'referredUid', 'referredName',
+        'commissionEarned', 'status', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'referrerUid', 'referredUid', 'referredName',
+        'level', 'commissionEarned', 'status', 'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.id)
+      && isValidId(data.referrerUid)
+      && isValidId(data.referredUid)
+      && data.referredName is string && data.referredName.size() >= 1 && data.referredName.size() <= 100
+      && (!('level' in data) || (data.level is number && data.level >= 1 && data.level <= 3))
+      && data.commissionEarned is number && data.commissionEarned >= 0
+      && data.status in ['active', 'rewarded']
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll([
+        'id', 'referralRate', 'minDeposit', 'minWithdrawal',
+        'supportPhone', 'supportEmail', 'adminPhone', 'announcement',
+        'allowMultipleSameVip', 'visibility', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'referralRate', 'minDeposit', 'minWithdrawal',
+        'supportPhone', 'supportEmail', 'adminPhone', 'announcement',
+        'allowMultipleSameVip', 'visibility', 'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.id)
+      && data.referralRate is number && data.referralRate >= 0 && data.referralRate <= 50
+      && data.minDeposit is number && data.minDeposit >= 500
+      && data.minWithdrawal is number && data.minWithdrawal >= 500
+      && data.supportPhone is string && data.supportPhone.size() >= 3 && data.supportPhone.size() <= 50
+      && data.supportEmail is string && data.supportEmail.size() >= 3 && data.supportEmail.size() <= 120
+      && data.adminPhone is string && data.adminPhone.size() >= 3 && data.adminPhone.size() <= 50
+      && data.announcement is string && data.announcement.size() >= 2 && data.announcement.size() <= 300
+      && data.allowMultipleSameVip is bool
+      && data.visibility == 'public'
+      && (!('createdAt' in data) || data.createdAt is timestamp)
+      && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(userId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidUser(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().role == 'user'
+        && incoming().balance == 0
+        && incoming().totalInvested == 0
+        && incoming().totalEarned == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(userId)
+        && isVerifiedUser()
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && (
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'withdrawalCountry', 'withdrawalMethod', 'withdrawalAccount',
+                'withdrawalHolder', 'phone', 'updatedAt'
+              ]) ||
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'balance', 'totalInvested', 'totalEarned', 'updatedAt'
+              ])
+            )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /projects/{projectId} {
+      allow get: if isValidId(projectId) && (existing().visibility == 'public' || isAdmin());
+      allow list: if resource.data.visibility == 'public' || isAdmin();
+      allow create: if isValidId(projectId) && isAdmin() && isValidProject(incoming())
+        && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isValidId(projectId) && isAdmin() && isValidProject(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(projectId) && isAdmin();
+    }
+
+    match /investments/{investmentId} {
+      allow get: if isValidId(investmentId) && (isOwner(existing().userId) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(investmentId)
+        && isVerifiedUser()
+        && isValidInvestment(incoming())
+        && incoming().userId == request.auth.uid
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && incoming().status == 'active'
+        && incoming().daysCredited == 0
+        && incoming().totalEarnedSoFar == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(investmentId)
+        && isVerifiedUser()
+        && isValidInvestment(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().projectId == existing().projectId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            isOwner(existing().userId)
+            && existing().status == 'active'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'daysCredited', 'totalEarnedSoFar', 'status', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && (isOwner(existing().userId) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(transactionId)
+        && isVerifiedUser()
+        && isValidTransaction(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            incoming().userId == request.auth.uid
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && (
+              (incoming().type == 'deposit' && incoming().status in ['pending', 'completed']) ||
+              (incoming().type == 'withdrawal' && incoming().status == 'pending') ||
+              (incoming().type in ['investment', 'payout'] && incoming().status == 'completed')
+            )
+          )
+        );
+
+      allow update: if isValidId(transactionId)
+        && isAdmin()
+        && isValidTransaction(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /referrals/{referralId} {
+      allow get: if isValidId(referralId) && (
+        isOwner(existing().referrerUid) || isOwner(existing().referredUid) || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.referrerUid == request.auth.uid || isAdmin()
+      );
+
+      allow create: if isValidId(referralId)
+        && isVerifiedUser()
+        && isValidReferral(incoming())
+        && incoming().referredUid == request.auth.uid
+        && incoming().commissionEarned == 0
+        && incoming().status == 'active'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(referralId)
+        && isAdmin()
+        && isValidReferral(incoming())
+        && incoming().id == existing().id
+        && incoming().referrerUid == existing().referrerUid
+        && incoming().referredUid == existing().referredUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /settings/{settingId} {
+      allow get: if isValidId(settingId) && (existing().visibility == 'public' || isAdmin());
+      allow list: if resource.data.visibility == 'public' || isAdmin();
+      allow create: if isValidId(settingId) && isAdmin() && isValidSettings(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(settingId) && isAdmin() && isValidSettings(incoming())
+        && incoming().id == existing().id
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+  }
+}

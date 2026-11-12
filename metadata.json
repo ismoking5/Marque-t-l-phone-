@@ -1,0 +1,6 @@
+{
+  "name": "KARITÉ D'OR",
+  "description": "Plateforme d'investissement agricole dédiée à la valorisation du karité, de l'anacarde et de l'agro-industrie ouest-africaine durable.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
