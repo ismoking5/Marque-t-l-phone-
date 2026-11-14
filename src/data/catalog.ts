@@ -5,11 +5,16 @@ import type {
   ProjectItem,
 } from '../types';
 
+import heroFlagshipImg from '../assets/images/hero_flagship_phones_1794514388316.jpg';
+import phoneTitaniumImg from '../assets/images/phone_compact_titanium_1794514386099.jpg';
+import phoneFoldableImg from '../assets/images/phone_foldable_edition_1794514385919.jpg';
+import phoneCeramicImg from '../assets/images/phone_sovereign_ceramic_1794514387657.jpg';
+
 export const BRAND_IMAGES = {
-  hero: '/src/assets/images/hero_flagship_phones_1794514388316.jpg',
-  titanium: '/src/assets/images/phone_compact_titanium_1794514386099.jpg',
-  foldable: '/src/assets/images/phone_foldable_edition_1794514385919.jpg',
-  ceramic: '/src/assets/images/phone_sovereign_ceramic_1794514387657.jpg',
+  hero: heroFlagshipImg,
+  titanium: phoneTitaniumImg,
+  foldable: phoneFoldableImg,
+  ceramic: phoneCeramicImg,
 } as const;
 
 export const COUNTRY_OPTIONS: CountryOption[] = [
