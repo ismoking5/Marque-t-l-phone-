@@ -43,6 +43,7 @@ import {
   ADMIN_EMAIL,
   BRAND_IMAGES,
   COUNTRY_OPTIONS,
+  DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PHONE,
   DEFAULT_SETTINGS,
   OFFICIAL_VIP_CATALOG,
@@ -53,7 +54,6 @@ import {
   formatCFA,
   formatDateFr,
   getProjectDailyIncome,
-  phonesMatch,
   sanitizeId,
 } from './data/catalog';
 import {
@@ -92,11 +92,57 @@ const SESSION_KEY = 'aurelia_mobile_active_phone_session_v1';
 const PROJECTS_KEY = 'aurelia_mobile_projects_v1';
 const SETTINGS_KEY = 'aurelia_mobile_settings_v1';
 const REF_UID_KEY = 'aurelia_mobile_ref_uid';
+const STRICT_ADMIN_MIGRATED_KEY = 'aurelia_mobile_strict_admin_v1';
+
+function isUniqueAdminPhone(phone?: string): boolean {
+  if (!phone) return false;
+  const digits = phone.replace(/\D/g, '');
+  const adminDigits = DEFAULT_ADMIN_PHONE.replace(/\D/g, '');
+  return digits === adminDigits;
+}
+
+function matchesReferralRef(user: UserProfile, refValue?: string): boolean {
+  if (!refValue) return false;
+  const target = refValue.trim().toLowerCase();
+  if (!target) return false;
+  return (
+    (user.referralCode || '').trim().toLowerCase() === target ||
+    (user.uid || '').trim().toLowerCase() === target
+  );
+}
 
 function loadAccounts(): Record<string, PhoneAccountRecord> {
   try {
     const raw = localStorage.getItem(ACCOUNTS_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, PhoneAccountRecord>) : {};
+    const parsed: Record<string, PhoneAccountRecord> = raw
+      ? (JSON.parse(raw) as Record<string, PhoneAccountRecord>)
+      : {};
+    if (!localStorage.getItem(STRICT_ADMIN_MIGRATED_KEY)) {
+      localStorage.setItem(STRICT_ADMIN_MIGRATED_KEY, '1');
+      let changed = false;
+      Object.entries(parsed).forEach(([k, acc]) => {
+        const isTargetAdmin = isUniqueAdminPhone(acc.profile?.phone);
+        const expectedRole: 'admin' | 'user' = isTargetAdmin ? 'admin' : 'user';
+        if (acc.profile?.role !== expectedRole) {
+          parsed[k] = {
+            ...acc,
+            profile: { ...acc.profile, role: expectedRole },
+          };
+          changed = true;
+        }
+        if (isTargetAdmin && acc.password !== DEFAULT_ADMIN_PASSWORD) {
+          parsed[k] = {
+            ...parsed[k],
+            password: DEFAULT_ADMIN_PASSWORD,
+          };
+          changed = true;
+        }
+      });
+      if (changed) {
+        localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(parsed));
+      }
+    }
+    return parsed;
   } catch {
     return {};
   }
@@ -141,10 +187,12 @@ function loadLocalSettings(): PlatformSettings {
     if (!localStorage.getItem(MIN_WD_1000_MIGRATED_KEY)) {
       localStorage.setItem(MIN_WD_1000_MIGRATED_KEY, '1');
       if (merged.minWithdrawal === 2500) {
-        const migrated = { ...merged, minWithdrawal: 1000 };
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(migrated));
-        return migrated;
+        merged.minWithdrawal = 1000;
       }
+    }
+    if (merged.adminPhone !== DEFAULT_ADMIN_PHONE) {
+      merged.adminPhone = DEFAULT_ADMIN_PHONE;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
     }
     return merged;
   } catch {
@@ -269,13 +317,20 @@ export default function App() {
   };
 
   const isAdmin = useMemo(() => {
-    if (!firebaseUser && !phoneSessionKey) return false;
-    return !!(
-      userProfile?.role === 'admin' ||
-      phonesMatch(userProfile?.phone, settings.adminPhone) ||
-      firebaseUser?.email === ADMIN_EMAIL
-    );
-  }, [firebaseUser, phoneSessionKey, userProfile, settings.adminPhone]);
+    if (firebaseUser) {
+      return !!(firebaseUser.email === ADMIN_EMAIL || userProfile?.role === 'admin');
+    }
+    if (phoneSessionKey && userProfile) {
+      return isUniqueAdminPhone(userProfile.phone);
+    }
+    return false;
+  }, [firebaseUser, phoneSessionKey, userProfile]);
+
+  useEffect(() => {
+    if (activeTab === 'admin' && !isAdmin) {
+      setActiveTab('home');
+    }
+  }, [activeTab, isAdmin]);
 
   const { allUsers, allTransactions, allInvestments, allReferrals } = useMemo(() => {
     const localList = Object.values(loadAccounts());
@@ -283,11 +338,10 @@ export default function App() {
     const usersMap = new Map<string, UserProfile>();
     cloudUsers.forEach((u) => usersMap.set(u.uid, u));
     localList.forEach((acc) => {
-      const adminFlag =
-        acc.profile.role === 'admin' || phonesMatch(acc.profile.phone, settings.adminPhone);
+      const adminFlag = isUniqueAdminPhone(acc.profile.phone);
       usersMap.set(acc.profile.uid, {
         ...acc.profile,
-        role: adminFlag ? 'admin' : acc.profile.role,
+        role: adminFlag ? 'admin' : 'user',
       });
     });
 
@@ -303,13 +357,48 @@ export default function App() {
     cloudReferrals.forEach((r) => refMap.set(r.id, r));
     localList.forEach((acc) => (acc.referrals || []).forEach((r) => refMap.set(r.id, r)));
 
+    const usersArr = Array.from(usersMap.values());
+    const pairKeySet = new Set<string>();
+    refMap.forEach((r) => pairKeySet.add(`${r.referrerUid}__${r.referredUid}`));
+
+    // Reconcile up to 3 levels of referral links from user.referredBy
+    usersArr.forEach((member) => {
+      if (!member.referredBy) return;
+      let cursorRef: string | undefined = member.referredBy;
+      const visited = new Set<string>([member.uid]);
+      for (let lvl = 1; lvl <= 3 && cursorRef; lvl++) {
+        const sponsor = usersArr.find((u) => matchesReferralRef(u, cursorRef));
+        if (!sponsor || visited.has(sponsor.uid)) break;
+        visited.add(sponsor.uid);
+        const pairKey = `${sponsor.uid}__${member.uid}`;
+        if (!pairKeySet.has(pairKey)) {
+          pairKeySet.add(pairKey);
+          const synthId = sanitizeId(
+            `ref_${sponsor.uid.slice(0, 14)}_${member.uid.slice(0, 14)}_l${lvl}`
+          );
+          refMap.set(synthId, {
+            id: synthId,
+            referrerUid: sponsor.uid,
+            referredUid: member.uid,
+            referredName: member.phone || member.displayName,
+            level: lvl,
+            commissionEarned: 0,
+            status: 'active',
+            createdAt: member.createdAt,
+            updatedAt: member.updatedAt,
+          });
+        }
+        cursorRef = sponsor.referredBy;
+      }
+    });
+
     return {
-      allUsers: Array.from(usersMap.values()),
+      allUsers: usersArr,
       allTransactions: Array.from(txMap.values()),
       allInvestments: Array.from(invMap.values()),
       allReferrals: Array.from(refMap.values()),
     };
-  }, [cloudUsers, cloudTransactions, cloudInvestments, cloudReferrals, localSyncTick, settings.adminPhone]);
+  }, [cloudUsers, cloudTransactions, cloudInvestments, cloudReferrals, localSyncTick]);
 
   // Read URL referral params
   useEffect(() => {
@@ -327,23 +416,30 @@ export default function App() {
     const accounts = loadAccounts();
     const record = accounts[phoneSessionKey];
     if (record) {
-      const promoted =
-        record.profile.role === 'admin' || phonesMatch(record.profile.phone, settings.adminPhone)
-          ? { ...record.profile, role: 'admin' as const }
-          : record.profile;
-      setUserProfile(promoted);
+      const expectedRole: 'admin' | 'user' = isUniqueAdminPhone(record.profile.phone)
+        ? 'admin'
+        : 'user';
+      const normalizedProfile: UserProfile =
+        record.profile.role === expectedRole
+          ? record.profile
+          : { ...record.profile, role: expectedRole };
+      if (record.profile.role !== expectedRole) {
+        accounts[phoneSessionKey] = { ...record, profile: normalizedProfile };
+        saveAccounts(accounts);
+      }
+      setUserProfile(normalizedProfile);
       setInvestments(record.investments || []);
       setTransactions(record.transactions || []);
       setReferrals(record.referrals || []);
-      setWdCountry(promoted.withdrawalCountry || 'Burkina Faso');
-      setWdMethod(promoted.withdrawalMethod || 'Orange Money Burkina');
-      setWdAccount(promoted.withdrawalAccount || promoted.phone || '');
-      setWdHolder(promoted.withdrawalHolder || promoted.displayName || '');
+      setWdCountry(normalizedProfile.withdrawalCountry || 'Burkina Faso');
+      setWdMethod(normalizedProfile.withdrawalMethod || 'Orange Money Burkina');
+      setWdAccount(normalizedProfile.withdrawalAccount || normalizedProfile.phone || '');
+      setWdHolder(normalizedProfile.withdrawalHolder || normalizedProfile.displayName || '');
     } else {
       setPhoneSessionKey(null);
       localStorage.removeItem(SESSION_KEY);
     }
-  }, [firebaseUser, phoneSessionKey, settings.adminPhone, localSyncTick]);
+  }, [firebaseUser, phoneSessionKey, localSyncTick]);
 
   // Firebase Auth listener
   useEffect(() => {
@@ -441,7 +537,11 @@ export default function App() {
             const hasLocalOverride =
               !firebaseUser && localStorage.getItem(SETTINGS_LOCAL_OVERRIDE_KEY) === '1';
             if (hasLocalOverride) return;
-            const data = { ...DEFAULT_SETTINGS, ...(snap.data() as PlatformSettings) };
+            const data: PlatformSettings = {
+              ...DEFAULT_SETTINGS,
+              ...(snap.data() as PlatformSettings),
+              adminPhone: DEFAULT_ADMIN_PHONE,
+            };
             setSettings(data);
             saveLocalSettings(data);
           }
@@ -675,15 +775,17 @@ export default function App() {
     const key = `${dialCode}_${cleanPhone}`;
     const fullPhone = `${dialCode} ${cleanPhone}`;
     const accounts = loadAccounts();
-    const hasExistingAdmin = Object.values(accounts).some((a) => a.profile.role === 'admin');
-    const matchesAdminPhone = phonesMatch(fullPhone, settings.adminPhone);
-    const hasAdminInvite = payload.invitationCode.trim().toUpperCase() === 'ADMIN-AM';
-    const shouldBeAdmin = matchesAdminPhone || hasAdminInvite || !hasExistingAdmin;
+    const isAdminCredential = isUniqueAdminPhone(fullPhone);
     const defaultMethod =
       COUNTRY_OPTIONS.find((c) => c.country === payload.country)?.methods[0] ||
       'Orange Money Burkina';
 
     if (payload.mode === 'register') {
+      if (isAdminCredential) {
+        throw new Error(
+          "Ce numéro est réservé à l'administrateur unique. Veuillez vous connecter dans l'onglet Connexion."
+        );
+      }
       if (accounts[key]) {
         throw new Error('Ce numéro de téléphone est déjà inscrit. Veuillez vous connecter.');
       }
@@ -692,8 +794,9 @@ export default function App() {
       const referralCode = sanitizeId(
         `AM-${cleanPhone.replace(/\D/g, '').slice(-6).padStart(6, '0')}`
       );
-      const referredBy = payload.invitationCode
-        ? sanitizeId(payload.invitationCode)
+      const rawInvite = payload.invitationCode.trim();
+      const referredBy = rawInvite
+        ? sanitizeId(rawInvite.toUpperCase())
         : localStorage.getItem(REF_UID_KEY) || '';
 
       const newProfile: UserProfile = {
@@ -712,39 +815,41 @@ export default function App() {
         referredBy,
         referralBonus: 0,
         referralCount: 0,
-        role: shouldBeAdmin ? 'admin' : 'user',
+        role: 'user',
         createdAt: nowIso,
         updatedAt: nowIso,
       };
 
-      if (!hasExistingAdmin && shouldBeAdmin) {
-        const nextSettings = { ...settings, adminPhone: fullPhone };
-        setSettings(nextSettings);
-        saveLocalSettings(nextSettings);
-      }
-
       if (referredBy) {
-        const sponsor = Object.values(accounts).find(
-          (a) => a.profile.referralCode === referredBy || a.profile.uid === referredBy
-        );
-        if (sponsor && sponsor.key !== key) {
-          const refRecord: ReferralItem = {
-            id: sanitizeId(`ref_${sponsor.profile.uid.slice(0, 14)}_${uid.slice(0, 14)}`),
-            referrerUid: sponsor.profile.uid,
-            referredUid: uid,
-            referredName: cleanPhone,
-            level: 1,
-            commissionEarned: 0,
-            status: 'active',
-            createdAt: nowIso,
-            updatedAt: nowIso,
-          };
-          sponsor.referrals = [refRecord, ...(sponsor.referrals || [])];
-          sponsor.profile = {
-            ...sponsor.profile,
-            referralCount: sponsor.referrals.length,
-          };
-          accounts[sponsor.key] = sponsor;
+        let cursorRef: string | undefined = referredBy;
+        const visited = new Set<string>([key]);
+        for (let lvl = 1; lvl <= 3 && cursorRef; lvl++) {
+          const sponsor = Object.values(accounts).find((a) =>
+            matchesReferralRef(a.profile, cursorRef)
+          );
+          if (!sponsor || visited.has(sponsor.key)) break;
+          visited.add(sponsor.key);
+          const alreadyHas = (sponsor.referrals || []).some((r) => r.referredUid === uid);
+          if (!alreadyHas) {
+            const refRecord: ReferralItem = {
+              id: sanitizeId(`ref_${sponsor.profile.uid.slice(0, 14)}_${uid.slice(0, 14)}`),
+              referrerUid: sponsor.profile.uid,
+              referredUid: uid,
+              referredName: cleanPhone,
+              level: lvl,
+              commissionEarned: 0,
+              status: 'active',
+              createdAt: nowIso,
+              updatedAt: nowIso,
+            };
+            sponsor.referrals = [refRecord, ...(sponsor.referrals || [])];
+            sponsor.profile = {
+              ...sponsor.profile,
+              referralCount: sponsor.referrals.length,
+            };
+            accounts[sponsor.key] = sponsor;
+          }
+          cursorRef = sponsor.profile.referredBy;
         }
       }
 
@@ -779,15 +884,16 @@ export default function App() {
       if (existing.password !== payload.password) {
         throw new Error('Mot de passe incorrect. Veuillez vérifier votre saisie.');
       }
+      const expectedRole: 'admin' | 'user' = isAdminCredential ? 'admin' : 'user';
       const nextProfile: UserProfile =
-        existing.profile.role === 'admin' || matchesAdminPhone || !hasExistingAdmin
-          ? { ...existing.profile, role: 'admin' }
-          : existing.profile;
+        existing.profile.role === expectedRole
+          ? existing.profile
+          : { ...existing.profile, role: expectedRole };
       if (nextProfile.role !== existing.profile.role) {
         accounts[key] = { ...existing, profile: nextProfile };
         saveAccounts(accounts);
-        setLocalSyncTick((t) => t + 1);
       }
+      setLocalSyncTick((t) => t + 1);
       localStorage.setItem(SESSION_KEY, key);
       setPhoneSessionKey(key);
       setUserProfile(nextProfile);
@@ -803,7 +909,12 @@ export default function App() {
       return;
     }
 
-    // Auto-create local profile on first sign-in (matches reference model behavior)
+    // Admin unique login on a fresh device requires exact password Redbook@1
+    if (isAdminCredential && payload.password !== DEFAULT_ADMIN_PASSWORD) {
+      throw new Error('Mot de passe administrateur incorrect. Veuillez vérifier votre saisie.');
+    }
+
+    // Auto-create local profile on first sign-in (only user role unless unique admin verified above)
     const nowIso = new Date().toISOString();
     const uid = sanitizeId(`usr_${dialCode.replace(/\D/g, '')}_${cleanPhone.replace(/\D/g, '')}`);
     const referralCode = sanitizeId(
@@ -825,15 +936,10 @@ export default function App() {
       referredBy: '',
       referralBonus: 0,
       referralCount: 0,
-      role: shouldBeAdmin ? 'admin' : 'user',
+      role: isAdminCredential ? 'admin' : 'user',
       createdAt: nowIso,
       updatedAt: nowIso,
     };
-    if (!hasExistingAdmin && shouldBeAdmin) {
-      const nextSettings = { ...settings, adminPhone: fullPhone };
-      setSettings(nextSettings);
-      saveLocalSettings(nextSettings);
-    }
     accounts[key] = {
       key,
       password: payload.password,
@@ -855,7 +961,7 @@ export default function App() {
     setWdAccount(fullPhone);
     setWdHolder(fullPhone);
     setActiveTab('home');
-    showToast('Connexion réussie.');
+    showToast(isAdminCredential ? 'Connexion administrateur réussie.' : 'Connexion réussie.');
   };
 
   const handleGoogleSignIn = async () => {
@@ -1081,9 +1187,8 @@ export default function App() {
         const rates = [0.3, 0.02, 0.01];
         let currentRefCode: string | undefined = userProfile.referredBy;
         for (let lvl = 0; lvl < 3 && currentRefCode; lvl++) {
-          const sponsor = Object.values(accounts).find(
-            (a) =>
-              a.profile.referralCode === currentRefCode || a.profile.uid === currentRefCode
+          const sponsor = Object.values(accounts).find((a) =>
+            matchesReferralRef(a.profile, currentRefCode)
           );
           if (!sponsor || sponsor.key === phoneSessionKey) break;
           const bonus = Math.round(totalCost * rates[lvl]);
@@ -1677,7 +1782,7 @@ export default function App() {
       minWithdrawal: Math.max(500, Number(nextSettings.minWithdrawal) || 1000),
       supportPhone: clampStr(nextSettings.supportPhone, 3, 50, DEFAULT_SETTINGS.supportPhone),
       supportEmail: clampStr(nextSettings.supportEmail, 3, 120, DEFAULT_SETTINGS.supportEmail),
-      adminPhone: clampStr(nextSettings.adminPhone, 3, 50, DEFAULT_ADMIN_PHONE),
+      adminPhone: DEFAULT_ADMIN_PHONE,
       announcement: clampStr(nextSettings.announcement, 2, 300, DEFAULT_SETTINGS.announcement),
       allowMultipleSameVip: nextSettings.allowMultipleSameVip !== false,
       visibility: 'public',
@@ -1803,21 +1908,35 @@ export default function App() {
     [wdCountry]
   );
 
-  // Team levels breakdown
+  // Team levels breakdown (combines stored referrals + derived 3-level tree across allUsers)
   const teamByLevel = useMemo(() => {
-    const lvl1 = referrals.filter((r) => !r.level || r.level === 1);
-    const lvl2 = referrals.filter((r) => r.level === 2);
-    const lvl3 = referrals.filter((r) => r.level === 3);
+    const mergedMap = new Map<string, ReferralItem>();
+    referrals.forEach((r) => mergedMap.set(r.referredUid, r));
+    if (userProfile) {
+      allReferrals
+        .filter((r) => r.referrerUid === userProfile.uid)
+        .forEach((r) => {
+          const existing = mergedMap.get(r.referredUid);
+          if (!existing || (r.commissionEarned || 0) > (existing.commissionEarned || 0)) {
+            mergedMap.set(r.referredUid, r);
+          }
+        });
+    }
+    const merged = Array.from(mergedMap.values());
+    const lvl1 = merged.filter((r) => !r.level || r.level === 1);
+    const lvl2 = merged.filter((r) => r.level === 2);
+    const lvl3 = merged.filter((r) => r.level === 3);
     const sum = (list: ReferralItem[]) =>
       list.reduce((acc, item) => acc + Math.round(item.commissionEarned || 0), 0);
     return {
       1: lvl1,
       2: lvl2,
       3: lvl3,
+      totalUsers: lvl1.length + lvl2.length + lvl3.length,
       revenue: { 1: sum(lvl1), 2: sum(lvl2), 3: sum(lvl3) },
-      totalRevenue: sum(referrals),
+      totalRevenue: sum(merged),
     };
-  }, [referrals]);
+  }, [referrals, allReferrals, userProfile]);
 
   // Render Auth screen when logged out
   if (authReady && !(firebaseUser || phoneSessionKey)) {
@@ -2457,7 +2576,7 @@ export default function App() {
                   <div className="rounded-2xl bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#0F172A] text-white py-3 px-5 shadow-xs border border-[#334155] grid grid-cols-2 divide-x divide-white/20 text-center">
                     <div>
                       <p className="text-base sm:text-lg font-mono-num font-extrabold text-[#F5C533]">
-                        {referrals.length}
+                        {teamByLevel.totalUsers}
                       </p>
                       <p className="text-[11px] sm:text-xs text-slate-200 font-medium">
                         Utilisateurs valides
@@ -3342,6 +3461,8 @@ export default function App() {
               onAdjustUserBalance={handleAdminAdjustBalance}
               onGiftProduct={handleAdminGiftProduct}
               onSaveSettings={handleAdminSaveSettings}
+              isCloudConnected={!!firebaseUser}
+              onConnectGoogleCloud={handleGoogleSignIn}
             />
           </main>
         )}

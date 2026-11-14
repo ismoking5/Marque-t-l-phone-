@@ -192,6 +192,7 @@ export const OFFICIAL_VIP_IDS = ['vip_1', 'vip_2', 'vip_3', 'vip_4', 'vip_5'];
 
 export const ADMIN_EMAIL = 'ismailasawadogo10@gmail.com';
 export const DEFAULT_ADMIN_PHONE = '+226 77409899';
+export const DEFAULT_ADMIN_PASSWORD = 'Redbook@1';
 
 const ONE_DAY_MS = 86_400_000;
 

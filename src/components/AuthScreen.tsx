@@ -26,7 +26,7 @@ export function AuthScreen({
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [invitationCode, setInvitationCode] = useState(initialInvitationCode || 'AM-2026');
+  const [invitationCode, setInvitationCode] = useState(initialInvitationCode || '');
   const [rememberPassword, setRememberPassword] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -238,7 +238,7 @@ export function AuthScreen({
                   type="text"
                   value={invitationCode}
                   onChange={(e) => setInvitationCode(e.target.value)}
-                  placeholder="Code d'invitation"
+                  placeholder="Code d'invitation (optionnel, ex: AM-409899)"
                   className="w-full h-11 px-3.5 rounded-lg border border-[#D8DDE6] bg-white text-xs sm:text-sm font-mono-num text-[#0F172A] placeholder:text-[#64748B] focus:outline-none focus:border-[#0F172A] focus:ring-1 focus:ring-[#0F172A]/20"
                 />
               </div>

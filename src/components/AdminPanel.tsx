@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import {
   BRAND_IMAGES,
+  DEFAULT_ADMIN_PHONE,
   OFFICIAL_VIP_CATALOG,
   computeInvestmentMetrics,
   formatCFA,
@@ -76,6 +77,8 @@ export function AdminPanel({
   onAdjustUserBalance,
   onGiftProduct,
   onSaveSettings,
+  isCloudConnected = false,
+  onConnectGoogleCloud,
 }: {
   projects: ProjectItem[];
   users: UserProfile[];
@@ -94,6 +97,8 @@ export function AdminPanel({
     reason: string
   ) => Promise<void>;
   onSaveSettings: (settings: PlatformSettings) => Promise<void>;
+  isCloudConnected?: boolean;
+  onConnectGoogleCloud?: () => Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<
     'projects' | 'transactions' | 'investments' | 'referrals' | 'users' | 'settings'
@@ -961,6 +966,30 @@ export function AdminPanel({
             />
           </div>
 
+          {!isCloudConnected && (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-xs font-extrabold text-amber-950">
+                  Mode téléphone local actif sur ce navigateur
+                </p>
+                <p className="text-[11px] text-amber-900 leading-relaxed">
+                  Les inscriptions par numéro de téléphone sont enregistrées localement dans le
+                  navigateur utilisé lors de l&apos;inscription. Connectez le Cloud Google
+                  administrateur pour afficher tous les comptes synchronisés dans Firestore.
+                </p>
+              </div>
+              {onConnectGoogleCloud && (
+                <button
+                  type="button"
+                  onClick={() => void onConnectGoogleCloud()}
+                  className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] text-xs font-extrabold whitespace-nowrap cursor-pointer"
+                >
+                  Synchroniser le Cloud Google
+                </button>
+              )}
+            </div>
+          )}
+
           {selectedUser && (
             <form
               onSubmit={handleCreditSubmit}
@@ -1184,18 +1213,13 @@ export function AdminPanel({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div>
               <label className="block text-xs font-semibold text-[#334155] mb-1">
-                Numéro Administrateur principal
+                Administrateur unique (verrouillé)
               </label>
               <input
                 type="text"
-                minLength={3}
-                maxLength={50}
-                value={draftSettings.adminPhone ?? ''}
-                onChange={(e) =>
-                  setDraftSettings({ ...draftSettings, adminPhone: e.target.value })
-                }
-                className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs font-mono-num font-bold text-[#0F172A]"
-                required
+                readOnly
+                value={DEFAULT_ADMIN_PHONE}
+                className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] text-xs font-mono-num font-bold text-[#0F172A] cursor-not-allowed"
               />
             </div>
             <div>
