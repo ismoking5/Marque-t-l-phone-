@@ -7,6 +7,7 @@ import {
   Clock,
   Copy,
   CreditCard,
+  ExternalLink,
   Layers,
   Send,
   Share2,
@@ -18,6 +19,7 @@ import {
 import {
   BRAND_IMAGES,
   COUNTRY_OPTIONS,
+  DEPOSIT_PAYMENT_URL,
   PAYMENT_CHANNELS,
   QUICK_DEPOSIT_AMOUNTS,
   SUPPORT_CHANNELS,
@@ -218,13 +220,22 @@ export function DepositModal({
               </label>
             </div>
 
-            <div className="pt-2 flex justify-center">
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+              <a
+                href={DEPOSIT_PAYMENT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto min-w-[210px] min-h-[44px] px-6 rounded-full bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] font-extrabold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Payer maintenant ({formatCFA(numericAmount)})
+              </a>
               <button
                 type="submit"
                 disabled={submitting}
-                className="min-w-[230px] min-h-[44px] px-8 rounded-full bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] font-extrabold text-xs sm:text-sm shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                className="w-full sm:w-auto min-w-[210px] min-h-[44px] px-6 rounded-full bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] font-extrabold text-xs sm:text-sm shadow-sm transition-all disabled:opacity-50 cursor-pointer"
               >
-                {submitting ? 'Traitement en cours...' : 'Rechargez maintenant'}
+                {submitting ? 'Traitement en cours...' : 'Confirmer ma recharge'}
               </button>
             </div>
           </div>
@@ -239,12 +250,12 @@ export function DepositModal({
                 à ce montant ne sera pas crédité sur votre compte.
               </p>
               <p>
-                2. Veuillez utiliser vos informations de compte les plus récentes pour chaque
-                dépôt ; n&apos;utilisez pas d&apos;informations obsolètes.
+                2. Cliquez sur <strong>« Payer maintenant »</strong> pour effectuer votre règlement
+                en toute sécurité sur la passerelle de paiement AURELIA MOBILE.
               </p>
               <p>
-                3. Veuillez lire attentivement les instructions fournies par la plateforme de
-                paiement AURELIA MOBILE et les suivre scrupuleusement.
+                3. Une fois le paiement effectué, renseignez votre numéro Mobile Money et cliquez sur{' '}
+                <strong>« Confirmer ma recharge »</strong> pour enregistrer l&apos;opération.
               </p>
               <p>
                 4. Si votre dépôt n&apos;apparaît pas sur votre compte après la validation du
@@ -293,7 +304,7 @@ export function WithdrawModal({
   if (!isOpen) return null;
 
   const balance = userProfile?.balance || 0;
-  const minWithdrawal = Math.max(2500, settings.minWithdrawal || 2500);
+  const minWithdrawal = Math.max(500, settings.minWithdrawal || 1000);
   const numericAmount = Number(amountInput) || 0;
   const netReceived = numericAmount > 0 ? numericAmount * 0.85 : 0;
   const netFormatted =

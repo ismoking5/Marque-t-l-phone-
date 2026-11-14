@@ -1,21 +1,33 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
+  AlertCircle,
+  Award,
+  Calendar,
   CheckCircle2,
+  CreditCard,
   Edit3,
+  Eye,
   FileText,
+  Gift,
   Layers,
+  Mail,
+  Phone,
   Plus,
   RefreshCw,
   Save,
+  Search,
   Settings,
   Shield,
   Smartphone,
+  UserCheck,
   Users,
   Wallet,
+  X,
   XCircle,
 } from 'lucide-react';
 import {
   BRAND_IMAGES,
+  OFFICIAL_VIP_CATALOG,
   computeInvestmentMetrics,
   formatCFA,
   formatDateFr,
@@ -38,6 +50,19 @@ const PRESET_IMAGES = [
   { label: 'Céramique & Or', url: BRAND_IMAGES.ceramic },
 ];
 
+function getTimestampMs(val: unknown): number {
+  if (!val) return 0;
+  if (typeof val === 'object' && val !== null && 'toMillis' in val) {
+    const fn = (val as { toMillis?: () => number }).toMillis;
+    if (typeof fn === 'function') return fn();
+  }
+  if (typeof val === 'string') {
+    const parsed = Date.parse(val);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
 export function AdminPanel({
   projects,
   users,
@@ -49,6 +74,7 @@ export function AdminPanel({
   onResetOfficialVipCatalog,
   onProcessTransaction,
   onAdjustUserBalance,
+  onGiftProduct,
   onSaveSettings,
 }: {
   projects: ProjectItem[];
@@ -61,20 +87,44 @@ export function AdminPanel({
   onResetOfficialVipCatalog: () => Promise<void>;
   onProcessTransaction: (tx: TransactionItem, nextStatus: 'approved' | 'rejected') => Promise<void>;
   onAdjustUserBalance: (user: UserProfile, delta: number, reason: string) => Promise<void>;
+  onGiftProduct: (
+    user: UserProfile,
+    project: ProjectItem,
+    quantity: number,
+    reason: string
+  ) => Promise<void>;
   onSaveSettings: (settings: PlatformSettings) => Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<
     'projects' | 'transactions' | 'investments' | 'referrals' | 'users' | 'settings'
   >('projects');
   const [txFilter, setTxFilter] = useState<'all' | 'pending' | 'deposit' | 'withdrawal'>('all');
+  const [userSearch, setUserSearch] = useState('');
   const [editingProject, setEditingProject] = useState<ProjectItem | null>(null);
   const [isNewProject, setIsNewProject] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Credit form state
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [creditAmount, setCreditAmount] = useState(5000);
   const [creditReason, setCreditReason] = useState('Crédit ajouté par administration');
+
+  // Gift product modal state
+  const [giftModalOpen, setGiftModalOpen] = useState(false);
+  const [giftTargetUid, setGiftTargetUid] = useState('');
+  const [giftProjectId, setGiftProjectId] = useState('');
+  const [giftQuantity, setGiftQuantity] = useState(1);
+  const [giftReason, setGiftReason] = useState('Produit offert par administration');
+
+  // Full user account detail modal state
+  const [detailUserUid, setDetailUserUid] = useState<string | null>(null);
+  const [detailTxFilter, setDetailTxFilter] = useState<
+    'all' | 'deposit' | 'withdrawal' | 'investment' | 'payout' | 'credit'
+  >('all');
+
   const [draftSettings, setDraftSettings] = useState<PlatformSettings>(settings);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraftSettings(settings);
@@ -83,6 +133,104 @@ export function AdminPanel({
   const notify = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
+  };
+
+  // Full catalog including custom products & official fallback, active or paused
+  const fullCatalog = useMemo(() => {
+    const map = new Map<string, ProjectItem>();
+    OFFICIAL_VIP_CATALOG.forEach((p) => map.set(p.id, p));
+    projects.forEach((p) => map.set(p.id, p));
+    return Array.from(map.values()).sort((a, b) => a.minInvestment - b.minInvestment);
+  }, [projects]);
+
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) =>
+      [
+        u.displayName,
+        u.phone,
+        u.email,
+        u.uid,
+        u.referralCode,
+        u.withdrawalAccount,
+        u.withdrawalCountry,
+        u.withdrawalHolder,
+      ]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(q))
+    );
+  }, [users, userSearch]);
+
+  const detailUser = useMemo(
+    () => (detailUserUid ? users.find((u) => u.uid === detailUserUid) || null : null),
+    [detailUserUid, users]
+  );
+
+  const detailUserData = useMemo(() => {
+    if (!detailUser) return null;
+    const now = Date.now();
+    const userInvestments = investments
+      .filter((i) => i.userId === detailUser.uid)
+      .map((inv) => ({ inv, metrics: computeInvestmentMetrics(inv, now) }))
+      .sort((a, b) => b.inv.purchasedAtMs - a.inv.purchasedAtMs);
+
+    const activeDailyIncome = userInvestments
+      .filter((item) => !item.metrics.isExpired && item.inv.status === 'active')
+      .reduce((acc, item) => acc + item.metrics.dailyIncome, 0);
+
+    const userTransactions = transactions
+      .filter((t) => t.userId === detailUser.uid)
+      .sort((a, b) => getTimestampMs(b.createdAt) - getTimestampMs(a.createdAt));
+
+    const filteredUserTransactions = userTransactions.filter((t) => {
+      if (detailTxFilter === 'all') return true;
+      if (detailTxFilter === 'credit') {
+        return t.type === 'credit' || t.type === 'referral' || t.type === 'gift';
+      }
+      return t.type === detailTxFilter;
+    });
+
+    const totalDeposits = userTransactions
+      .filter((t) => t.type === 'deposit' && (t.status === 'approved' || t.status === 'completed'))
+      .reduce((acc, t) => acc + t.amount, 0);
+
+    const totalWithdrawals = userTransactions
+      .filter((t) => t.type === 'withdrawal' && t.status !== 'rejected')
+      .reduce((acc, t) => acc + t.amount, 0);
+
+    const userReferrals = referrals.filter((r) => r.referrerUid === detailUser.uid);
+
+    const sponsor = detailUser.referredBy
+      ? users.find(
+          (u) => u.referralCode === detailUser.referredBy || u.uid === detailUser.referredBy
+        ) || null
+      : null;
+
+    return {
+      userInvestments,
+      activeDailyIncome,
+      userTransactions,
+      filteredUserTransactions,
+      totalDeposits,
+      totalWithdrawals,
+      userReferrals,
+      sponsor,
+    };
+  }, [detailUser, detailTxFilter, investments, transactions, referrals, users]);
+
+  const openGiftModal = (opts?: { user?: UserProfile | null; project?: ProjectItem | null }) => {
+    if (users.length === 0) {
+      notify('Aucun utilisateur inscrit pour le moment.');
+      return;
+    }
+    const target = opts?.user || users[0];
+    const prod = opts?.project || fullCatalog[0];
+    setGiftTargetUid(target?.uid || '');
+    setGiftProjectId(prod?.id || '');
+    setGiftQuantity(1);
+    setGiftReason('Produit offert par administration');
+    setGiftModalOpen(true);
   };
 
   const openNewProjectForm = () => {
@@ -144,10 +292,15 @@ export function AdminPanel({
 
   const handleSaveSettingsSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setSettingsError(null);
     setSaving(true);
     try {
       await onSaveSettings(draftSettings);
-      notify('Paramètres enregistrés.');
+      notify('Tous les paramètres ont été enregistrés.');
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : "Impossible d'enregistrer les paramètres."
+      );
     } finally {
       setSaving(false);
     }
@@ -165,6 +318,29 @@ export function AdminPanel({
       setSaving(false);
     }
   };
+
+  const handleGiftSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const targetUser = users.find((u) => u.uid === giftTargetUid);
+    const targetProject = fullCatalog.find((p) => p.id === giftProjectId);
+    if (!targetUser || !targetProject) return;
+    setSaving(true);
+    try {
+      await onGiftProduct(targetUser, targetProject, giftQuantity, giftReason);
+      notify(
+        `${giftQuantity > 1 ? `${giftQuantity}x ` : ''}${targetProject.title} offert à ${targetUser.displayName}.`
+      );
+      setGiftModalOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectedGiftProject = fullCatalog.find((p) => p.id === giftProjectId) || fullCatalog[0];
+  const selectedGiftUser = users.find((u) => u.uid === giftTargetUid) || null;
+  const giftUnitDaily = selectedGiftProject ? getProjectDailyIncome(selectedGiftProject) : 0;
+  const giftTotalDaily = giftUnitDaily * Math.max(1, giftQuantity);
+  const giftDuration = selectedGiftProject?.durationDays || 90;
 
   const pendingCount = transactions.filter((t) => t.status === 'pending').length;
   const activeContractsCount = investments.filter((i) => i.status === 'active').length;
@@ -188,7 +364,7 @@ export function AdminPanel({
                 Administration AURELIA MOBILE
               </h2>
               <p className="text-xs text-slate-300">
-                Synchronisation temps réel : Produits, Transactions, Contrats VIP, Équipes &amp;
+                Synchronisation temps réel : Produits, Cadeaux VIP, Transactions, Contrats &amp;
                 Utilisateurs
               </p>
             </div>
@@ -267,7 +443,15 @@ export function AdminPanel({
             <h3 className="text-base font-extrabold text-[#0F172A]">
               Catalogue Smartphones VIP (Cycle 90 jours)
             </h3>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openGiftModal()}
+                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Gift className="w-4 h-4" />
+                Offrir un produit
+              </button>
               <button
                 type="button"
                 onClick={handleSyncCatalog}
@@ -502,7 +686,7 @@ export function AdminPanel({
                       Revenu : <span className="font-mono-num">{formatCFA(daily)} / jour</span> ·{' '}
                       {p.durationDays}j
                     </p>
-                    <div className="flex items-center gap-2 mt-3">
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
                       <button
                         type="button"
                         onClick={() => {
@@ -513,6 +697,14 @@ export function AdminPanel({
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                         Modifier
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openGiftModal({ project: p })}
+                        className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Gift className="w-3.5 h-3.5" />
+                        Offrir ce produit
                       </button>
                     </div>
                   </div>
@@ -622,9 +814,19 @@ export function AdminPanel({
 
       {activeTab === 'investments' && (
         <div className="space-y-3">
-          <h3 className="text-base font-extrabold text-[#0F172A]">
-            Contrats VIP souscrits ({investments.length})
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-extrabold text-[#0F172A]">
+              Contrats VIP souscrits ({investments.length})
+            </h3>
+            <button
+              type="button"
+              onClick={() => openGiftModal()}
+              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Gift className="w-4 h-4" />
+              Offrir un produit à un membre
+            </button>
+          </div>
           {investments.length === 0 ? (
             <div className="p-8 rounded-2xl bg-white border border-[#E2E5EC] text-center text-xs text-[#475569]">
               Aucun contrat VIP enregistré.
@@ -633,17 +835,23 @@ export function AdminPanel({
             <div className="space-y-2.5">
               {investments.map((inv) => {
                 const metrics = computeInvestmentMetrics(inv);
+                const isGifted = inv.id.startsWith('vipgift_');
                 return (
                   <div
                     key={inv.id}
                     className="p-4 rounded-2xl bg-white border border-[#E2E5EC] flex flex-wrap items-center justify-between gap-3"
                   >
                     <div>
-                      <div className="flex items-center gap-2 text-xs">
+                      <div className="flex items-center gap-2 text-xs flex-wrap">
                         <span className="font-extrabold text-[#0F172A]">{inv.userName}</span>
                         <span aria-hidden="true">·</span>
                         <span className="font-extrabold text-[#0F766E]">{inv.projectTitle}</span>
                         <span className="text-[#475569]">({inv.projectCategory})</span>
+                        {isGifted && (
+                          <span className="px-2 py-0.5 rounded-md bg-[#0F172A] text-[#F5C533] text-[10px] font-extrabold">
+                            Offert par Admin
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-[#334155] mt-0.5 font-mono-num">
                         Capital : <strong>{formatCFA(inv.amount)}</strong> · Revenu :{' '}
@@ -653,7 +861,7 @@ export function AdminPanel({
                       </p>
                       {Boolean(inv.createdAt) && (
                         <p className="text-[11px] text-[#475569] mt-0.5">
-                          Souscrit le {formatDateFr(inv.createdAt)}
+                          Attribué le {formatDateFr(inv.createdAt)}
                         </p>
                       )}
                     </div>
@@ -727,9 +935,31 @@ export function AdminPanel({
 
       {activeTab === 'users' && (
         <div className="space-y-4">
-          <h3 className="text-base font-extrabold text-[#0F172A]">
-            Comptes membres inscrits ({users.length})
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-base font-extrabold text-[#0F172A]">
+              Comptes membres inscrits ({filteredUsers.length}
+              {userSearch.trim() ? ` / ${users.length}` : ''})
+            </h3>
+            <button
+              type="button"
+              onClick={() => openGiftModal()}
+              className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Gift className="w-4 h-4" />
+              Offrir un produit
+            </button>
+          </div>
+
+          <div className="relative">
+            <Search className="w-4 h-4 text-[#475569] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              placeholder="Rechercher un utilisateur (nom, téléphone, email, code parrainage, UID...)"
+              className="w-full h-11 pl-10 pr-4 rounded-2xl bg-white border border-[#CBD5E1] text-xs font-medium text-[#0F172A] focus:outline-none focus:border-[#0F172A]"
+            />
+          </div>
 
           {selectedUser && (
             <form
@@ -785,43 +1015,81 @@ export function AdminPanel({
             </form>
           )}
 
-          <div className="space-y-2.5">
-            {users.map((u) => (
-              <div
-                key={u.uid}
-                className="p-4 rounded-2xl bg-white border border-[#E2E5EC] flex flex-wrap items-center justify-between gap-3"
-              >
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-extrabold text-[#0F172A]">{u.displayName}</span>
-                    <span className="text-xs text-[#475569]">· {u.email}</span>
-                    {u.role === 'admin' && (
-                      <span className="text-xs font-bold text-[#9A6B00]">· Administrateur</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-[#334155] mt-0.5 font-mono-num">
-                    Solde : <strong className="text-[#0F766E]">{formatCFA(u.balance)}</strong> ·
-                    Achats : {formatCFA(u.totalInvested)} · Gains : +{formatCFA(u.totalEarned)}
-                  </p>
-                  {u.withdrawalAccount && (
-                    <p className="text-[11px] text-[#475569] mt-0.5">
-                      Retrait ({u.withdrawalCountry || 'Pays non défini'}) : {u.withdrawalMethod} ·{' '}
-                      <span className="font-mono-num">{u.withdrawalAccount}</span>
-                    </p>
-                  )}
-                </div>
+          {filteredUsers.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-white border border-[#E2E5EC] text-center text-xs text-[#475569]">
+              Aucun compte utilisateur trouvé pour cette recherche.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {filteredUsers.map((u) => {
+                const userActiveInvCount = investments.filter(
+                  (i) => i.userId === u.uid && i.status === 'active'
+                ).length;
+                return (
+                  <div
+                    key={u.uid}
+                    className="p-4 rounded-2xl bg-white border border-[#E2E5EC] flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-extrabold text-[#0F172A]">
+                          {u.displayName}
+                        </span>
+                        <span className="text-xs text-[#475569]">· {u.email}</span>
+                        {u.role === 'admin' && (
+                          <span className="text-xs font-bold text-[#9A6B00]">
+                            · Administrateur
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#334155] mt-0.5 font-mono-num">
+                        Solde : <strong className="text-[#0F766E]">{formatCFA(u.balance)}</strong>{' '}
+                        · Achats : {formatCFA(u.totalInvested)} · Gains : +
+                        {formatCFA(u.totalEarned)} · VIP actifs : <strong>{userActiveInvCount}</strong>
+                      </p>
+                      <p className="text-[11px] text-[#475569] mt-0.5">
+                        Tél : <span className="font-mono-num">{u.phone || 'Non renseigné'}</span> ·
+                        Code : <span className="font-mono-num font-bold">{u.referralCode}</span>
+                        {u.withdrawalAccount
+                          ? ` · Retrait (${u.withdrawalCountry || 'Pays non défini'}) : ${u.withdrawalMethod} (${u.withdrawalAccount})`
+                          : ''}
+                      </p>
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={() => setSelectedUser(u)}
-                  className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F3F4F6] hover:bg-[#E2E5EC] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Wallet className="w-3.5 h-3.5 text-[#0F172A]" />
-                  Créditer le compte
-                </button>
-              </div>
-            ))}
-          </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDetailTxFilter('all');
+                          setDetailUserUid(u.uid);
+                        }}
+                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-[#F5C533]" />
+                        Détails du compte
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openGiftModal({ user: u })}
+                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Gift className="w-3.5 h-3.5" />
+                        Offrir un produit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUser(u)}
+                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F3F4F6] hover:bg-[#E2E5EC] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Wallet className="w-3.5 h-3.5 text-[#0F172A]" />
+                        Créditer
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -833,6 +1101,13 @@ export function AdminPanel({
           <h3 className="text-base font-extrabold text-[#0F172A]">
             Paramètres généraux de la plateforme
           </h3>
+
+          {settingsError && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-700 mt-0.5" />
+              <span>{settingsError}</span>
+            </div>
+          )}
 
           <div className="p-4 rounded-2xl bg-[#F3F4F6] border border-[#E2E5EC] flex items-center justify-between gap-3">
             <div>
@@ -861,8 +1136,9 @@ export function AdminPanel({
               </label>
               <input
                 type="number"
-                min={1}
+                min={0}
                 max={50}
+                step={1}
                 value={draftSettings.referralRate}
                 onChange={(e) =>
                   setDraftSettings({ ...draftSettings, referralRate: Number(e.target.value) })
@@ -878,7 +1154,7 @@ export function AdminPanel({
               <input
                 type="number"
                 min={500}
-                step={500}
+                step={1}
                 value={draftSettings.minDeposit}
                 onChange={(e) =>
                   setDraftSettings({ ...draftSettings, minDeposit: Number(e.target.value) })
@@ -894,7 +1170,7 @@ export function AdminPanel({
               <input
                 type="number"
                 min={500}
-                step={500}
+                step={1}
                 value={draftSettings.minWithdrawal}
                 onChange={(e) =>
                   setDraftSettings({ ...draftSettings, minWithdrawal: Number(e.target.value) })
@@ -912,7 +1188,9 @@ export function AdminPanel({
               </label>
               <input
                 type="text"
-                value={draftSettings.adminPhone || '+226 77409899'}
+                minLength={3}
+                maxLength={50}
+                value={draftSettings.adminPhone ?? ''}
                 onChange={(e) =>
                   setDraftSettings({ ...draftSettings, adminPhone: e.target.value })
                 }
@@ -926,7 +1204,9 @@ export function AdminPanel({
               </label>
               <input
                 type="text"
-                value={draftSettings.supportPhone}
+                minLength={3}
+                maxLength={50}
+                value={draftSettings.supportPhone ?? ''}
                 onChange={(e) =>
                   setDraftSettings({ ...draftSettings, supportPhone: e.target.value })
                 }
@@ -940,7 +1220,9 @@ export function AdminPanel({
               </label>
               <input
                 type="email"
-                value={draftSettings.supportEmail}
+                minLength={3}
+                maxLength={120}
+                value={draftSettings.supportEmail ?? ''}
                 onChange={(e) =>
                   setDraftSettings({ ...draftSettings, supportEmail: e.target.value })
                 }
@@ -956,7 +1238,9 @@ export function AdminPanel({
             </label>
             <input
               type="text"
-              value={draftSettings.announcement}
+              minLength={2}
+              maxLength={300}
+              value={draftSettings.announcement ?? ''}
               onChange={(e) =>
                 setDraftSettings({ ...draftSettings, announcement: e.target.value })
               }
@@ -974,6 +1258,586 @@ export function AdminPanel({
             {saving ? 'Enregistrement...' : 'Enregistrer les paramètres'}
           </button>
         </form>
+      )}
+
+      {/* MODAL: FULL USER ACCOUNT DETAILS */}
+      {detailUser && detailUserData && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Détails du compte ${detailUser.displayName}`}
+        >
+          <div className="bg-[#F3F4F6] w-full max-w-3xl max-h-[92vh] rounded-t-3xl sm:rounded-3xl border border-[#CBD5E1] shadow-2xl flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-[#0F172A] text-white px-5 py-4 flex items-center justify-between gap-3 shrink-0">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-extrabold font-display truncate">
+                    {detailUser.displayName}
+                  </h3>
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                      detailUser.role === 'admin'
+                        ? 'bg-[#F5C533] text-[#0F172A]'
+                        : 'bg-white/15 text-white'
+                    }`}
+                  >
+                    {detailUser.role === 'admin' ? 'Administrateur' : 'Membre'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 font-mono-num truncate mt-0.5">
+                  UID : {detailUser.uid}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailUserUid(null)}
+                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer shrink-0"
+                aria-label="Fermer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
+              {/* Quick Actions */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openGiftModal({ user: detailUser })}
+                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Gift className="w-4 h-4" />
+                  Offrir un produit à ce membre
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedUser(detailUser);
+                    setActiveTab('users');
+                    setDetailUserUid(null);
+                  }}
+                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Wallet className="w-4 h-4 text-[#F5C533]" />
+                  Créditer / Ajuster le solde
+                </button>
+              </div>
+
+              {/* Financial Overview Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                <div className="p-3.5 rounded-2xl bg-white border border-[#E2E5EC]">
+                  <span className="text-[11px] font-semibold text-[#475569] block">
+                    Solde disponible
+                  </span>
+                  <strong className="text-sm sm:text-base font-mono-num font-extrabold text-[#0F766E]">
+                    {formatCFA(detailUser.balance)}
+                  </strong>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-white border border-[#E2E5EC]">
+                  <span className="text-[11px] font-semibold text-[#475569] block">
+                    Total investi / Produits
+                  </span>
+                  <strong className="text-sm sm:text-base font-mono-num font-extrabold text-[#0F172A]">
+                    {formatCFA(detailUser.totalInvested)}
+                  </strong>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-white border border-[#E2E5EC]">
+                  <span className="text-[11px] font-semibold text-[#475569] block">
+                    Gains totaux reçus
+                  </span>
+                  <strong className="text-sm sm:text-base font-mono-num font-extrabold text-[#0F766E]">
+                    +{formatCFA(detailUser.totalEarned)}
+                  </strong>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-white border border-[#E2E5EC]">
+                  <span className="text-[11px] font-semibold text-[#475569] block">
+                    Revenu quotidien actif
+                  </span>
+                  <strong className="text-sm sm:text-base font-mono-num font-extrabold text-[#9A6B00]">
+                    {formatCFA(detailUserData.activeDailyIncome)} / j
+                  </strong>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-white border border-[#E2E5EC]">
+                  <span className="text-[11px] font-semibold text-[#475569] block">
+                    Dépôts approuvés
+                  </span>
+                  <strong className="text-sm sm:text-base font-mono-num font-extrabold text-[#0F172A]">
+                    {formatCFA(detailUserData.totalDeposits)}
+                  </strong>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-white border border-[#E2E5EC]">
+                  <span className="text-[11px] font-semibold text-[#475569] block">
+                    Retraits demandés/payés
+                  </span>
+                  <strong className="text-sm sm:text-base font-mono-num font-extrabold text-[#0F172A]">
+                    {formatCFA(detailUserData.totalWithdrawals)}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Identity & Withdrawal Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-4 rounded-2xl bg-white border border-[#E2E5EC] space-y-2">
+                  <h4 className="text-xs font-extrabold text-[#0F172A] uppercase tracking-wide flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-[#0F766E]" />
+                    Identité &amp; Profil
+                  </h4>
+                  <div className="space-y-1.5 text-xs text-[#334155]">
+                    <p className="flex items-center gap-2">
+                      <Phone className="w-3.5 h-3.5 text-[#475569] shrink-0" />
+                      <span>
+                        Téléphone :{' '}
+                        <strong className="font-mono-num text-[#0F172A]">
+                          {detailUser.phone || 'Non renseigné'}
+                        </strong>
+                      </span>
+                    </p>
+                    <p className="flex items-center gap-2 break-all">
+                      <Mail className="w-3.5 h-3.5 text-[#475569] shrink-0" />
+                      <span>
+                        Email : <strong className="text-[#0F172A]">{detailUser.email}</strong>
+                      </span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 text-[#475569] shrink-0" />
+                      <span>
+                        Inscription :{' '}
+                        <strong className="text-[#0F172A]">
+                          {detailUser.createdAt ? formatDateFr(detailUser.createdAt) : 'N/D'}
+                        </strong>
+                      </span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 text-[#475569] shrink-0" />
+                      <span>
+                        Dernière activité :{' '}
+                        <strong className="text-[#0F172A]">
+                          {detailUser.updatedAt ? formatDateFr(detailUser.updatedAt) : 'N/D'}
+                        </strong>
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white border border-[#E2E5EC] space-y-2">
+                  <h4 className="text-xs font-extrabold text-[#0F172A] uppercase tracking-wide flex items-center gap-1.5">
+                    <CreditCard className="w-4 h-4 text-[#9A6B00]" />
+                    Compte de Retrait Mobile Money
+                  </h4>
+                  {detailUser.withdrawalAccount ? (
+                    <div className="space-y-1.5 text-xs text-[#334155]">
+                      <p>
+                        Pays :{' '}
+                        <strong className="text-[#0F172A]">
+                          {detailUser.withdrawalCountry || 'Non défini'}
+                        </strong>
+                      </p>
+                      <p>
+                        Opérateur / Méthode :{' '}
+                        <strong className="text-[#0F172A]">
+                          {detailUser.withdrawalMethod || 'Non défini'}
+                        </strong>
+                      </p>
+                      <p>
+                        Numéro / Compte :{' '}
+                        <strong className="font-mono-num text-[#0F172A]">
+                          {detailUser.withdrawalAccount}
+                        </strong>
+                      </p>
+                      <p>
+                        Titulaire :{' '}
+                        <strong className="text-[#0F172A]">
+                          {detailUser.withdrawalHolder || detailUser.displayName}
+                        </strong>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[#64748B]">
+                      Aucun compte de retrait configuré par cet utilisateur pour le moment.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Referral & Team Details */}
+              <div className="p-4 rounded-2xl bg-white border border-[#E2E5EC] space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-xs font-extrabold text-[#0F172A] uppercase tracking-wide flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-[#0F766E]" />
+                    Parrainage &amp; Équipe ({detailUserData.userReferrals.length} filleul
+                    {detailUserData.userReferrals.length > 1 ? 's' : ''})
+                  </h4>
+                  <span className="text-xs font-mono-num font-bold text-[#9A6B00]">
+                    Bonus : +{formatCFA(detailUser.referralBonus || 0)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-[#334155]">
+                  <p>
+                    Code d&apos;invitation :{' '}
+                    <strong className="font-mono-num text-[#0F172A]">
+                      {detailUser.referralCode}
+                    </strong>
+                  </p>
+                  <p>
+                    Parrainé par :{' '}
+                    <strong className="text-[#0F172A]">
+                      {detailUserData.sponsor
+                        ? `${detailUserData.sponsor.displayName} (${detailUserData.sponsor.referralCode})`
+                        : detailUser.referredBy || 'Aucun parrain'}
+                    </strong>
+                  </p>
+                </div>
+                {detailUserData.userReferrals.length > 0 && (
+                  <div className="divide-y divide-[#F1F5F9] border-t border-[#F1F5F9] pt-2 max-h-40 overflow-y-auto">
+                    {detailUserData.userReferrals.map((ref) => (
+                      <div
+                        key={ref.id}
+                        className="py-1.5 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div>
+                          <span className="font-bold text-[#0F172A]">{ref.referredName}</span>
+                          <span className="text-[#475569] ml-2">
+                            Niveau {ref.level || 1} · {ref.status}
+                          </span>
+                        </div>
+                        <span className="font-mono-num font-bold text-[#0F766E]">
+                          +{formatCFA(ref.commissionEarned || 0)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* User VIP Products / Contracts */}
+              <div className="p-4 rounded-2xl bg-white border border-[#E2E5EC] space-y-2.5">
+                <h4 className="text-xs font-extrabold text-[#0F172A] uppercase tracking-wide flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4 text-[#0F172A]" />
+                  Produits VIP détenus ({detailUserData.userInvestments.length})
+                </h4>
+                {detailUserData.userInvestments.length === 0 ? (
+                  <p className="text-xs text-[#64748B]">
+                    Ce membre ne possède aucun produit VIP pour le moment.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {detailUserData.userInvestments.map(({ inv, metrics }) => {
+                      const isGifted = inv.id.startsWith('vipgift_');
+                      return (
+                        <div
+                          key={inv.id}
+                          className="p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E5EC] flex flex-wrap items-center justify-between gap-2"
+                        >
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-extrabold text-[#0F172A]">
+                                {inv.projectTitle}
+                              </span>
+                              {isGifted && (
+                                <span className="px-1.5 py-0.5 rounded bg-[#0F172A] text-[#F5C533] text-[10px] font-extrabold">
+                                  Offert
+                                </span>
+                              )}
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                  metrics.isExpired
+                                    ? 'bg-amber-100 text-[#9A6B00]'
+                                    : 'bg-emerald-100 text-[#0F766E]'
+                                }`}
+                              >
+                                {metrics.displayStatus}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[#334155] font-mono-num mt-0.5">
+                              Valeur : {formatCFA(inv.amount)} · Revenu :{' '}
+                              {formatCFA(metrics.dailyIncome)}/j · Cycle : {metrics.elapsedDays}/
+                              {metrics.durationDays}j
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="block text-xs font-mono-num font-extrabold text-[#0F766E]">
+                              +{formatCFA(metrics.totalEarnedSoFar)}
+                            </span>
+                            {Boolean(inv.createdAt) && (
+                              <span className="text-[10px] text-[#64748B]">
+                                {formatDateFr(inv.createdAt)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* User Transactions History */}
+              <div className="p-4 rounded-2xl bg-white border border-[#E2E5EC] space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-xs font-extrabold text-[#0F172A] uppercase tracking-wide flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-[#0F172A]" />
+                    Historique des transactions ({detailUserData.userTransactions.length})
+                  </h4>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { id: 'all' as const, label: 'Toutes' },
+                      { id: 'deposit' as const, label: 'Dépôts' },
+                      { id: 'withdrawal' as const, label: 'Retraits' },
+                      { id: 'investment' as const, label: 'Achats' },
+                      { id: 'payout' as const, label: 'Gains' },
+                      { id: 'credit' as const, label: 'Crédits & Cadeaux' },
+                    ].map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setDetailTxFilter(f.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
+                          detailTxFilter === f.id
+                            ? 'bg-[#0F172A] text-[#F5C533]'
+                            : 'bg-[#F3F4F6] text-[#334155]'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {detailUserData.filteredUserTransactions.length === 0 ? (
+                  <p className="text-xs text-[#64748B]">
+                    Aucune transaction dans cette catégorie.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-[#F1F5F9] max-h-64 overflow-y-auto">
+                    {detailUserData.filteredUserTransactions.map((tx) => (
+                      <div
+                        key={tx.id}
+                        className="py-2.5 flex flex-wrap items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-[#0F172A]">
+                            <span className="uppercase text-[#0F766E] mr-1.5">{tx.type}</span>
+                            {tx.reference}
+                          </p>
+                          <p className="text-[11px] text-[#475569]">
+                            {tx.method}
+                            {tx.phoneOrAccount ? ` · ${tx.phoneOrAccount}` : ''}
+                            {tx.createdAt ? ` · ${formatDateFr(tx.createdAt)}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="text-right">
+                            <span className="block text-xs font-mono-num font-extrabold text-[#0F172A]">
+                              {formatCFA(tx.amount)}
+                            </span>
+                            <span className="text-[10px] font-semibold text-[#9A6B00]">
+                              {tx.status}
+                            </span>
+                          </div>
+                          {tx.status === 'pending' && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => onProcessTransaction(tx, 'approved')}
+                                className="px-2 py-1 rounded-lg bg-[#0F172A] text-[#F5C533] text-[10px] font-bold cursor-pointer"
+                              >
+                                Approuver
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onProcessTransaction(tx, 'rejected')}
+                                className="px-2 py-1 rounded-lg bg-red-600 text-white text-[10px] font-bold cursor-pointer"
+                              >
+                                Rejeter
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: GIFT ANY PRODUCT TO A USER */}
+      {giftModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Offrir un produit à un utilisateur"
+        >
+          <form
+            onSubmit={handleGiftSubmit}
+            className="bg-white w-full max-w-lg max-h-[92vh] rounded-t-3xl sm:rounded-3xl border border-[#CBD5E1] shadow-2xl flex flex-col overflow-hidden"
+          >
+            <div className="bg-[#0F172A] text-white px-5 py-4 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#F5C533] text-[#0F172A] flex items-center justify-center">
+                  <Gift className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold font-display">Offrir un produit VIP</h3>
+                  <p className="text-[11px] text-slate-300">
+                    Attribution gratuite sans débit du solde utilisateur
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGiftModalOpen(false)}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
+                aria-label="Fermer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                  Membre bénéficiaire
+                </label>
+                <select
+                  value={giftTargetUid}
+                  onChange={(e) => setGiftTargetUid(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs font-bold bg-white text-[#0F172A]"
+                  required
+                >
+                  {users.map((u) => (
+                    <option key={u.uid} value={u.uid}>
+                      {u.displayName} {u.phone ? `(${u.phone})` : ''} · Solde {formatCFA(u.balance)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                  Produit à offrir (tous les modèles du catalogue)
+                </label>
+                <select
+                  value={giftProjectId}
+                  onChange={(e) => setGiftProjectId(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs font-bold bg-white text-[#0F172A]"
+                  required
+                >
+                  {fullCatalog.map((p) => {
+                    const daily = getProjectDailyIncome(p);
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.title} · {formatCFA(p.minInvestment)} ({formatCFA(daily)}/j ·{' '}
+                        {p.durationDays}j){p.status === 'paused' ? ' [En pause]' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {selectedGiftProject && (
+                <div className="p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E5EC] flex items-center gap-3">
+                  <SafeImage
+                    src={selectedGiftProject.imageUrl}
+                    alt={selectedGiftProject.title}
+                    className="w-16 h-16 rounded-xl object-cover shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold text-[#0F172A] truncate">
+                      {selectedGiftProject.title}
+                    </p>
+                    <p className="text-[11px] text-[#475569] truncate">
+                      {selectedGiftProject.category}
+                    </p>
+                    <p className="text-xs font-mono-num font-bold text-[#0F766E] mt-0.5">
+                      +{formatCFA(giftUnitDaily)} / jour · {giftDuration} jours
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                    Quantité
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={giftQuantity}
+                    onChange={(e) =>
+                      setGiftQuantity(Math.max(1, Math.min(20, Number(e.target.value) || 1)))
+                    }
+                    className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs font-mono-num font-bold"
+                    required
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                    Motif / Libellé du cadeau
+                  </label>
+                  <input
+                    type="text"
+                    value={giftReason}
+                    onChange={(e) => setGiftReason(e.target.value)}
+                    placeholder="Ex : Bonus fidélité, Récompense équipe..."
+                    className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs"
+                    required
+                  />
+                </div>
+              </div>
+
+              {selectedGiftProject && selectedGiftUser && (
+                <div className="p-3.5 rounded-2xl bg-[#0F172A] text-white text-xs space-y-1">
+                  <p className="font-extrabold text-[#F5C533] flex items-center gap-1.5">
+                    <Award className="w-4 h-4" />
+                    Récapitulatif de l&apos;attribution gratuite
+                  </p>
+                  <p className="text-slate-200 leading-relaxed">
+                    <strong>{selectedGiftUser.displayName}</strong> recevra immédiatement{' '}
+                    <strong>
+                      {giftQuantity}x {selectedGiftProject.title}
+                    </strong>{' '}
+                    sans aucun débit sur son solde, générant{' '}
+                    <strong className="font-mono-num text-[#F5C533]">
+                      +{formatCFA(giftTotalDaily)} / jour
+                    </strong>{' '}
+                    pendant <strong>{giftDuration} jours</strong> (soit{' '}
+                    <strong className="font-mono-num">
+                      {formatCFA(giftTotalDaily * giftDuration)}
+                    </strong>{' '}
+                    de gains potentiels).
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setGiftModalOpen(false)}
+                  className="min-h-[44px] px-4 rounded-xl bg-[#F3F4F6] hover:bg-[#E2E5EC] text-[#0F172A] text-xs font-bold cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !selectedGiftUser || !selectedGiftProject}
+                  className="flex-1 min-h-[44px] px-5 rounded-xl bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Gift className="w-4 h-4" />
+                  {saving ? 'Attribution...' : "Confirmer l'offre du produit"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

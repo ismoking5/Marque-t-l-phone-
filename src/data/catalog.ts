@@ -60,6 +60,8 @@ export const COUNTRY_OPTIONS: CountryOption[] = [
   },
 ];
 
+export const DEPOSIT_PAYMENT_URL = 'https://payliv.shop/pay/plv_rkermm7f';
+
 export const PAYMENT_CHANNELS = [
   {
     id: 'UEMOA Mobile Money (Burkina · Mali · Sénégal · Bénin)',
@@ -83,7 +85,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   id: 'global',
   referralRate: 30,
   minDeposit: 4000,
-  minWithdrawal: 2500,
+  minWithdrawal: 1000,
   supportPhone: '+226 70 00 88 99',
   supportEmail: 'support@aureliamobile.africa',
   adminPhone: '+226 77409899',

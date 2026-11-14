@@ -129,18 +129,35 @@ function saveLocalProjects(projects: ProjectItem[]) {
   }
 }
 
+const SETTINGS_LOCAL_OVERRIDE_KEY = 'aurelia_mobile_settings_local_override_v1';
+const MIN_WD_1000_MIGRATED_KEY = 'aurelia_mobile_min_wd_1000_v1';
+
 function loadLocalSettings(): PlatformSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    return raw ? { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<PlatformSettings>) } : DEFAULT_SETTINGS;
+    const merged: PlatformSettings = raw
+      ? { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<PlatformSettings>) }
+      : DEFAULT_SETTINGS;
+    if (!localStorage.getItem(MIN_WD_1000_MIGRATED_KEY)) {
+      localStorage.setItem(MIN_WD_1000_MIGRATED_KEY, '1');
+      if (merged.minWithdrawal === 2500) {
+        const migrated = { ...merged, minWithdrawal: 1000 };
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(migrated));
+        return migrated;
+      }
+    }
+    return merged;
   } catch {
     return DEFAULT_SETTINGS;
   }
 }
 
-function saveLocalSettings(settings: PlatformSettings) {
+function saveLocalSettings(settings: PlatformSettings, markLocalOverride = false) {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    if (markLocalOverride) {
+      localStorage.setItem(SETTINGS_LOCAL_OVERRIDE_KEY, '1');
+    }
   } catch {
     // ignore
   }
@@ -160,6 +177,8 @@ function transactionTypeLabel(type: TransactionType): string {
       return 'Crédit ajouté au compte';
     case 'referral':
       return 'Bonus de parrainage';
+    case 'gift':
+      return 'Produit offert';
     default:
       return 'Opération';
   }
@@ -419,6 +438,9 @@ export default function App() {
         doc(db, 'settings', 'global'),
         (snap) => {
           if (snap.exists()) {
+            const hasLocalOverride =
+              !firebaseUser && localStorage.getItem(SETTINGS_LOCAL_OVERRIDE_KEY) === '1';
+            if (hasLocalOverride) return;
             const data = { ...DEFAULT_SETTINGS, ...(snap.data() as PlatformSettings) };
             setSettings(data);
             saveLocalSettings(data);
@@ -501,11 +523,23 @@ export default function App() {
       (snap) => setCloudReferrals(snap.docs.map((d) => d.data() as ReferralItem)),
       (err) => handleFirestoreError(err, OperationType.LIST, 'referrals')
     );
+    const u5 = onSnapshot(
+      collection(db, 'projects'),
+      (snap) => {
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => d.data() as ProjectItem);
+          setProjects(list);
+          saveLocalProjects(list);
+        }
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'projects')
+    );
     return () => {
       u1();
       u2();
       u3();
       u4();
+      u5();
     };
   }, [authReady, firebaseUser, isAdmin]);
 
@@ -1473,25 +1507,164 @@ export default function App() {
 
     if (firebaseUser) {
       try {
-        await updateDoc(doc(db, 'users', targetUser.uid), {
-          balance: nextBalance,
-          updatedAt: serverTimestamp(),
-        });
-        await setDoc(doc(db, 'transactions', txId), {
-          id: txId,
-          userId: sanitizeId(targetUser.uid),
-          userName: clampStr(targetUser.displayName, 1, 100),
-          type: 'credit',
-          amount: Math.abs(Math.round(delta)),
-          method: 'Crédit Administrateur',
-          phoneOrAccount: targetUser.referralCode || targetUser.email,
-          reference: clampStr(reason || 'Crédit ajouté au compte', 2, 100),
-          status: 'completed',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+        const uSnap = await getDoc(doc(db, 'users', targetUser.uid));
+        if (uSnap.exists() || !acc) {
+          await updateDoc(doc(db, 'users', targetUser.uid), {
+            balance: nextBalance,
+            updatedAt: serverTimestamp(),
+          });
+          await setDoc(doc(db, 'transactions', txId), {
+            id: txId,
+            userId: sanitizeId(targetUser.uid),
+            userName: clampStr(targetUser.displayName, 1, 100),
+            type: 'credit',
+            amount: Math.abs(Math.round(delta)),
+            method: 'Crédit Administrateur',
+            phoneOrAccount: targetUser.referralCode || targetUser.email,
+            reference: clampStr(reason || 'Crédit ajouté au compte', 2, 100),
+            status: 'completed',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, `users/${targetUser.uid}`);
+      }
+    }
+  };
+
+  const handleAdminGiftProduct = async (
+    targetUser: UserProfile,
+    project: ProjectItem,
+    quantity = 1,
+    reason = 'Produit offert par administration'
+  ) => {
+    const qty = Math.max(1, Math.min(20, Math.round(quantity)));
+    const unitPrice = Math.max(500, Math.round(project.minInvestment));
+    const unitDaily = Math.max(50, Math.round(getProjectDailyIncome(project)));
+    const durationDays = Math.max(1, Math.min(3650, Math.round(project.durationDays || 90)));
+    const totalValue = unitPrice * qty;
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const txId = sanitizeId(`tx_gift_${nowMs}_${targetUser.uid.slice(0, 6)}`);
+    const refLabel = clampStr(
+      `${reason ? `${reason.trim()} · ` : ''}${qty > 1 ? `${qty}x ` : ''}${project.title} (${formatCFA(unitDaily * qty)}/j)`,
+      2,
+      100
+    );
+
+    const accounts = loadAccounts();
+    const acc = Object.values(accounts).find((a) => a.profile.uid === targetUser.uid);
+    if (acc) {
+      const giftedContracts: InvestmentItem[] = [];
+      for (let i = 0; i < qty; i++) {
+        giftedContracts.push({
+          id: sanitizeId(`vipgift_${nowMs}_${i}_${targetUser.uid.slice(0, 6)}`),
+          userId: sanitizeId(targetUser.uid),
+          userName: clampStr(targetUser.displayName, 1, 100),
+          projectId: sanitizeId(project.id),
+          projectTitle: clampStr(project.title, 2, 120),
+          projectCategory: clampStr(project.category, 2, 60),
+          amount: unitPrice,
+          dailyIncome: unitDaily,
+          returnRate: Math.max(1, Math.round(project.returnRate || ((unitDaily * durationDays) / unitPrice) * 100)),
+          expectedProfit: Math.round(unitDaily * durationDays),
+          durationDays,
+          daysCredited: 0,
+          totalEarnedSoFar: 0,
+          purchasedAtMs: nowMs,
+          status: 'active',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        });
+      }
+      const giftTx: TransactionItem = {
+        id: txId,
+        userId: sanitizeId(targetUser.uid),
+        userName: clampStr(targetUser.displayName, 1, 100),
+        type: 'gift',
+        amount: Math.max(1, Math.round(totalValue)),
+        method: 'Cadeau Administrateur',
+        phoneOrAccount: targetUser.referralCode || targetUser.phone || targetUser.email,
+        reference: refLabel,
+        status: 'completed',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      const updated: PhoneAccountRecord = {
+        ...acc,
+        profile: {
+          ...acc.profile,
+          totalInvested: Math.round((acc.profile.totalInvested || 0) + totalValue),
+          updatedAt: nowIso,
+        },
+        investments: [...giftedContracts, ...(acc.investments || [])],
+        transactions: [giftTx, ...(acc.transactions || [])],
+      };
+      accounts[acc.key] = updated;
+      saveAccounts(accounts);
+      setLocalSyncTick((t) => t + 1);
+      if (phoneSessionKey === acc.key) {
+        setUserProfile(updated.profile);
+        setInvestments(updated.investments);
+        setTransactions(updated.transactions);
+      }
+    }
+
+    if (firebaseUser) {
+      try {
+        const uSnap = await getDoc(doc(db, 'users', targetUser.uid));
+        if (uSnap.exists() || !acc) {
+          const cloudCurrentInvested = uSnap.exists()
+            ? Number((uSnap.data() as UserProfile).totalInvested || 0)
+            : Number(targetUser.totalInvested || 0);
+          if (uSnap.exists()) {
+            await updateDoc(doc(db, 'users', targetUser.uid), {
+              totalInvested: Math.round(cloudCurrentInvested + totalValue),
+              updatedAt: serverTimestamp(),
+            });
+          }
+          for (let i = 0; i < qty; i++) {
+            const invId = sanitizeId(`vipgift_${nowMs}_${i}_${targetUser.uid.slice(0, 6)}`);
+            await setDoc(doc(db, 'investments', invId), {
+              id: invId,
+              userId: sanitizeId(targetUser.uid),
+              userName: clampStr(targetUser.displayName, 1, 100),
+              projectId: sanitizeId(project.id),
+              projectTitle: clampStr(project.title, 2, 120),
+              projectCategory: clampStr(project.category, 2, 60),
+              amount: unitPrice,
+              dailyIncome: unitDaily,
+              returnRate: Math.max(
+                1,
+                Math.round(project.returnRate || ((unitDaily * durationDays) / unitPrice) * 100)
+              ),
+              expectedProfit: Math.round(unitDaily * durationDays),
+              durationDays,
+              daysCredited: 0,
+              totalEarnedSoFar: 0,
+              purchasedAtMs: nowMs,
+              status: 'active',
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          }
+          await setDoc(doc(db, 'transactions', txId), {
+            id: txId,
+            userId: sanitizeId(targetUser.uid),
+            userName: clampStr(targetUser.displayName, 1, 100),
+            type: 'gift',
+            amount: Math.max(1, Math.round(totalValue)),
+            method: 'Cadeau Administrateur',
+            phoneOrAccount: targetUser.referralCode || targetUser.phone || targetUser.email,
+            reference: refLabel,
+            status: 'completed',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `investments/gift_${targetUser.uid}`);
       }
     }
   };
@@ -1499,30 +1672,48 @@ export default function App() {
   const handleAdminSaveSettings = async (nextSettings: PlatformSettings) => {
     const cleaned: PlatformSettings = {
       id: 'global',
-      referralRate: Math.max(0, Math.min(50, Number(nextSettings.referralRate))),
-      minDeposit: Math.max(500, Number(nextSettings.minDeposit)),
-      minWithdrawal: Math.max(500, Number(nextSettings.minWithdrawal)),
-      supportPhone: clampStr(nextSettings.supportPhone, 3, 50),
-      supportEmail: clampStr(nextSettings.supportEmail, 3, 120),
-      adminPhone: clampStr(nextSettings.adminPhone || DEFAULT_ADMIN_PHONE, 3, 50),
-      announcement: clampStr(nextSettings.announcement, 2, 300),
+      referralRate: Math.max(0, Math.min(50, Number(nextSettings.referralRate) || 0)),
+      minDeposit: Math.max(500, Number(nextSettings.minDeposit) || 4000),
+      minWithdrawal: Math.max(500, Number(nextSettings.minWithdrawal) || 1000),
+      supportPhone: clampStr(nextSettings.supportPhone, 3, 50, DEFAULT_SETTINGS.supportPhone),
+      supportEmail: clampStr(nextSettings.supportEmail, 3, 120, DEFAULT_SETTINGS.supportEmail),
+      adminPhone: clampStr(nextSettings.adminPhone, 3, 50, DEFAULT_ADMIN_PHONE),
+      announcement: clampStr(nextSettings.announcement, 2, 300, DEFAULT_SETTINGS.announcement),
       allowMultipleSameVip: nextSettings.allowMultipleSameVip !== false,
       visibility: 'public',
       updatedAt: new Date().toISOString(),
     };
     setSettings(cleaned);
-    saveLocalSettings(cleaned);
+    saveLocalSettings(cleaned, !firebaseUser);
 
     if (!firebaseUser) return;
     try {
+      localStorage.removeItem(SETTINGS_LOCAL_OVERRIDE_KEY);
       const ref = doc(db, 'settings', 'global');
-      const payload = { ...cleaned, updatedAt: serverTimestamp() };
-      if ((await getDoc(ref)).exists()) {
-        await updateDoc(ref, payload);
-      } else {
-        await setDoc(ref, { ...payload, createdAt: serverTimestamp() });
-      }
+      const snap = await getDoc(ref);
+      const existingCreatedAt = snap.exists() ? snap.data()?.createdAt : undefined;
+      await setDoc(ref, {
+        id: cleaned.id,
+        referralRate: cleaned.referralRate,
+        minDeposit: cleaned.minDeposit,
+        minWithdrawal: cleaned.minWithdrawal,
+        supportPhone: cleaned.supportPhone,
+        supportEmail: cleaned.supportEmail,
+        adminPhone: cleaned.adminPhone,
+        announcement: cleaned.announcement,
+        allowMultipleSameVip: cleaned.allowMultipleSameVip,
+        visibility: 'public',
+        createdAt: existingCreatedAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
     } catch (err) {
+      saveLocalSettings(cleaned, true);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.toLowerCase().includes('permission')) {
+        throw new Error(
+          `Paramètres enregistrés localement. Pour synchroniser dans le cloud Firestore, connectez-vous avec le compte Google administrateur (${ADMIN_EMAIL}).`
+        );
+      }
       handleFirestoreError(err, OperationType.WRITE, 'settings/global');
     }
   };
@@ -1600,7 +1791,9 @@ export default function App() {
   const filteredHistoryTransactions = useMemo(() => {
     if (historyFilter === 'all') return sortedTransactions;
     if (historyFilter === 'credit') {
-      return sortedTransactions.filter((t) => t.type === 'credit' || t.type === 'referral');
+      return sortedTransactions.filter(
+        (t) => t.type === 'credit' || t.type === 'referral' || t.type === 'gift'
+      );
     }
     return sortedTransactions.filter((t) => t.type === historyFilter);
   }, [sortedTransactions, historyFilter]);
@@ -2662,6 +2855,7 @@ export default function App() {
                   <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E2E5EC] space-y-4 shadow-2xs">
                     <div className="divide-y divide-[#F1F5F9]">
                       {filteredHistoryTransactions.map((tx) => {
+                        const isGift = tx.type === 'gift';
                         const isCredit =
                           tx.type === 'deposit' ||
                           tx.type === 'payout' ||
@@ -2675,12 +2869,16 @@ export default function App() {
                             <div className="flex items-start gap-3 min-w-0">
                               <div
                                 className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                                  isCredit
+                                  isGift
+                                    ? 'bg-[#0F172A] text-[#F5C533]'
+                                    : isCredit
                                     ? 'bg-slate-100 text-[#0F766E]'
                                     : 'bg-amber-50 text-[#9A6B00]'
                                 }`}
                               >
-                                {isCredit ? (
+                                {isGift ? (
+                                  <Award className="w-4 h-4" />
+                                ) : isCredit ? (
                                   <ArrowDownLeft className="w-4 h-4" />
                                 ) : (
                                   <ArrowUpRight className="w-4 h-4" />
@@ -2704,10 +2902,14 @@ export default function App() {
                             <div className="text-right shrink-0">
                               <span
                                 className={`block text-xs sm:text-sm font-mono-num font-extrabold ${
-                                  isCredit ? 'text-[#0F766E]' : 'text-[#9A6B00]'
+                                  isGift
+                                    ? 'text-[#0F172A]'
+                                    : isCredit
+                                    ? 'text-[#0F766E]'
+                                    : 'text-[#9A6B00]'
                                 }`}
                               >
-                                {isCredit ? '+' : '-'}
+                                {isGift ? 'Offert · ' : isCredit ? '+' : '-'}
                                 {formatCFA(tx.amount)}
                               </span>
                               <span className="text-[11px] text-[#475569]">
@@ -3138,6 +3340,7 @@ export default function App() {
               onResetOfficialVipCatalog={handleAdminSyncOfficialCatalog}
               onProcessTransaction={handleAdminProcessTransaction}
               onAdjustUserBalance={handleAdminAdjustBalance}
+              onGiftProduct={handleAdminGiftProduct}
               onSaveSettings={handleAdminSaveSettings}
             />
           </main>

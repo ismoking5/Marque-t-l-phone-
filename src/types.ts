@@ -71,7 +71,8 @@ export type TransactionType =
   | 'investment'
   | 'payout'
   | 'credit'
-  | 'referral';
+  | 'referral'
+  | 'gift';
 
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 

@@ -146,7 +146,7 @@ service cloud.firestore {
       && isValidId(data.id)
       && isValidId(data.userId)
       && data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100
-      && data.type in ['deposit', 'withdrawal', 'investment', 'payout', 'credit', 'referral']
+      && data.type in ['deposit', 'withdrawal', 'investment', 'payout', 'credit', 'referral', 'gift']
       && data.amount is number && data.amount > 0
       && data.method is string && data.method.size() >= 2 && data.method.size() <= 60
       && data.phoneOrAccount is string && data.phoneOrAccount.size() >= 2 && data.phoneOrAccount.size() <= 80
@@ -269,13 +269,17 @@ service cloud.firestore {
       allow create: if isValidId(investmentId)
         && isVerifiedUser()
         && isValidInvestment(incoming())
-        && incoming().userId == request.auth.uid
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && incoming().status == 'active'
         && incoming().daysCredited == 0
         && incoming().totalEarnedSoFar == 0
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            incoming().userId == request.auth.uid
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          )
+        );
 
       allow update: if isValidId(investmentId)
         && isVerifiedUser()
