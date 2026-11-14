@@ -101,6 +101,19 @@ function isUniqueAdminPhone(phone?: string): boolean {
   return digits === adminDigits;
 }
 
+function normalizeLocalPhoneNumber(dialCode: string, rawPhone: string): string {
+  const compact = rawPhone.replace(/\s+/g, '').trim();
+  const digits = compact.replace(/\D/g, '');
+  const dialDigits = dialCode.replace(/\D/g, '');
+  if (dialDigits && digits.startsWith(`00${dialDigits}`) && digits.length >= dialDigits.length + 8) {
+    return digits.slice(2 + dialDigits.length);
+  }
+  if (dialDigits && digits.startsWith(dialDigits) && digits.length >= dialDigits.length + 7) {
+    return digits.slice(dialDigits.length);
+  }
+  return digits || compact;
+}
+
 function matchesReferralRef(user: UserProfile, refValue?: string): boolean {
   if (!refValue) return false;
   const target = refValue.trim().toLowerCase();
@@ -317,8 +330,12 @@ export default function App() {
   };
 
   const isAdmin = useMemo(() => {
+    const adminEmailLower = ADMIN_EMAIL.toLowerCase();
     if (firebaseUser) {
-      return !!(firebaseUser.email === ADMIN_EMAIL || userProfile?.role === 'admin');
+      return !!(
+        firebaseUser.email?.toLowerCase() === adminEmailLower ||
+        userProfile?.role === 'admin'
+      );
     }
     if (phoneSessionKey && userProfile) {
       return isUniqueAdminPhone(userProfile.phone);
@@ -559,7 +576,8 @@ export default function App() {
           (snap) => {
             if (snap.exists()) {
               const p = snap.data() as UserProfile;
-              const isBootstrapAdmin = firebaseUser.email === ADMIN_EMAIL;
+              const isBootstrapAdmin =
+                firebaseUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
               const normalized: UserProfile = isBootstrapAdmin ? { ...p, role: 'admin' } : p;
               setUserProfile(normalized);
               setWdCountry(normalized.withdrawalCountry || 'Burkina Faso');
@@ -771,7 +789,7 @@ export default function App() {
 
   const handlePhoneAuth = async (payload: PhoneAuthPayload) => {
     const dialCode = payload.dialCode.trim();
-    const cleanPhone = payload.phone.replace(/\s+/g, '').trim();
+    const cleanPhone = normalizeLocalPhoneNumber(dialCode, payload.phone);
     const key = `${dialCode}_${cleanPhone}`;
     const fullPhone = `${dialCode} ${cleanPhone}`;
     const accounts = loadAccounts();
@@ -968,8 +986,18 @@ export default function App() {
     try {
       await signInWithGooglePopup();
       showToast('Connexion Google réussie.');
-    } catch {
-      showToast('Connexion Google annulée ou indisponible.');
+    } catch (err) {
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: unknown }).code || '')
+          : '';
+      if (code === 'auth/unauthorized-domain') {
+        showToast(
+          `Domaine non autorisé pour Google Auth (${window.location.hostname}). Ajoutez-le dans Firebase Console > Authentication > Domaines autorisés, ou utilisez le numéro administrateur (+226 77409899).`
+        );
+      } else {
+        showToast('Connexion Google annulée ou indisponible.');
+      }
     }
   };
 
@@ -1982,6 +2010,7 @@ export default function App() {
               className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#0F172A] text-[#F5C533] text-xs font-extrabold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Shield className="w-4 h-4" />
+              <span className="sm:hidden">Admin</span>
               <span className="hidden sm:inline">Administration</span>
             </button>
           )}
