@@ -19,7 +19,6 @@ import {
 import {
   BRAND_IMAGES,
   COUNTRY_OPTIONS,
-  DEPOSIT_PAYMENT_URL,
   PAYMENT_CHANNELS,
   QUICK_DEPOSIT_AMOUNTS,
   SUPPORT_CHANNELS,
@@ -46,7 +45,7 @@ export function DepositModal({
     method: string,
     phoneOrAccount: string,
     instantCredit: boolean
-  ) => Promise<void>;
+  ) => Promise<{ checkoutUrl?: string; message?: string } | void>;
   requireApprovalOnly?: boolean;
 }) {
   const [amountInput, setAmountInput] = useState('5000');
@@ -55,10 +54,12 @@ export function DepositModal({
   const [instantCredit, setInstantCredit] = useState(!requireApprovalOnly);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (userProfile?.phone) setPhoneInput(userProfile.phone);
     setErrorMsg(null);
+    setCheckoutUrl(null);
   }, [userProfile?.phone, isOpen]);
 
   if (!isOpen) return null;
@@ -68,6 +69,7 @@ export function DepositModal({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setCheckoutUrl(null);
     if (numericAmount < settings.minDeposit) {
       setErrorMsg(`Le montant minimum de recharge est de ${formatCFA(settings.minDeposit)}.`);
       return;
@@ -76,7 +78,14 @@ export function DepositModal({
       phoneInput.trim() || userProfile?.phone || userProfile?.email || 'Compte AURELIA MOBILE';
     try {
       setSubmitting(true);
-      await onSubmitDeposit(numericAmount, channel, accountRef, instantCredit);
+      const result = await onSubmitDeposit(numericAmount, channel, accountRef, instantCredit);
+      if (result && typeof result === 'object' && result.checkoutUrl) {
+        setCheckoutUrl(result.checkoutUrl);
+        if (window.self === window.top) {
+          window.location.assign(result.checkoutUrl);
+        }
+        return;
+      }
       onClose();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erreur lors de la recharge.');
@@ -224,24 +233,43 @@ export function DepositModal({
               </div>
             )}
 
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
-              <a
-                href={DEPOSIT_PAYMENT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto min-w-[210px] min-h-[44px] px-6 rounded-full bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] font-extrabold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2 transition-colors"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Payer maintenant ({formatCFA(numericAmount)})
-              </a>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full sm:w-auto min-w-[210px] min-h-[44px] px-6 rounded-full bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] font-extrabold text-xs sm:text-sm shadow-sm transition-all disabled:opacity-50 cursor-pointer"
-              >
-                {submitting ? 'Traitement en cours...' : 'Confirmer ma recharge'}
-              </button>
-            </div>
+            {checkoutUrl ? (
+              <div className="pt-2 space-y-2.5">
+                <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs font-medium">
+                  Session de paiement prête pour <strong>{formatCFA(numericAmount)}</strong>. Cliquez
+                  ci-dessous pour finaliser votre règlement sécurisé.
+                </div>
+                <a
+                  href={checkoutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full min-h-[46px] px-6 rounded-full bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] font-extrabold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Ouvrir la page de paiement ({formatCFA(numericAmount)})
+                </a>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full min-h-[40px] rounded-full bg-white border border-[#CBD5E1] text-[#0F172A] text-xs font-bold cursor-pointer"
+                >
+                  Fermer cette fenêtre
+                </button>
+              </div>
+            ) : (
+              <div className="pt-2 flex flex-col items-center justify-center gap-2.5">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full sm:w-auto min-w-[240px] min-h-[46px] px-7 rounded-full bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] font-extrabold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {submitting
+                    ? 'Initialisation du paiement...'
+                    : `Payer maintenant (${formatCFA(numericAmount)})`}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 pt-1">
@@ -254,12 +282,12 @@ export function DepositModal({
                 à ce montant ne sera pas crédité sur votre compte.
               </p>
               <p>
-                2. Cliquez sur <strong>« Payer maintenant »</strong> pour effectuer votre règlement
-                en toute sécurité sur la passerelle de paiement AURELIA MOBILE.
+                2. Renseignez le montant et votre numéro Mobile Money, puis cliquez sur{' '}
+                <strong>« Payer maintenant »</strong> pour accéder au guichet de paiement sécurisé.
               </p>
               <p>
-                3. Une fois le paiement effectué, renseignez votre numéro Mobile Money et cliquez sur{' '}
-                <strong>« Confirmer ma recharge »</strong> pour enregistrer l&apos;opération.
+                3. Validez le paiement sur votre téléphone Mobile Money pour finaliser votre
+                recharge.
               </p>
               <p>
                 4. Si votre dépôt n&apos;apparaît pas sur votre compte après la validation du

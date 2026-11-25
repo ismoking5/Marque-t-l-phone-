@@ -30,31 +30,6 @@ export function resolveBrandImageUrl(url?: string): string {
 
 export const COUNTRY_OPTIONS: CountryOption[] = [
   {
-    country: 'Burkina Faso',
-    dialCode: '+226',
-    methods: ['Orange Money Burkina', 'Moov Money Burkina', 'Wave Burkina', 'Virement Bancaire'],
-  },
-  {
-    country: "Côte d'Ivoire",
-    dialCode: '+225',
-    methods: ["Wave Côte d’Ivoire", 'Orange Money', 'MTN MoMo', 'Moov Money', 'Virement Bancaire'],
-  },
-  {
-    country: 'Togo',
-    dialCode: '+228',
-    methods: ['TMoney', 'Flooz Moov', 'Virement Bancaire'],
-  },
-  {
-    country: 'Sénégal',
-    dialCode: '+221',
-    methods: ['Wave Sénégal', 'Orange Money Sénégal', 'Free Money', 'Virement Bancaire'],
-  },
-  {
-    country: 'Mali',
-    dialCode: '+223',
-    methods: ['Orange Money Mali', 'Moov Money Mali', 'Wave Mali', 'Virement Bancaire'],
-  },
-  {
     country: 'Bénin',
     dialCode: '+229',
     methods: ['MTN MoMo Bénin', 'Moov Money Bénin', 'Celtiis Cash', 'Virement Bancaire'],
@@ -65,27 +40,93 @@ export const COUNTRY_OPTIONS: CountryOption[] = [
     methods: ['Orange Money Cameroun', 'MTN MoMo Cameroun', 'Virement Bancaire'],
   },
   {
-    country: 'Guinée',
-    dialCode: '+224',
-    methods: ['Orange Money Guinée', 'MTN MoMo Guinée', 'Virement Bancaire'],
+    country: 'Burkina Faso',
+    dialCode: '+226',
+    methods: ['Orange Money Burkina', 'Moov Money Burkina', 'Wave Burkina', 'Virement Bancaire'],
   },
   {
-    country: 'Congo / RDC / Gabon',
-    dialCode: '+242',
-    methods: ['Airtel Money', 'MTN MoMo', 'Orange Money', 'M-Pesa', 'Virement Bancaire'],
+    country: 'Sénégal',
+    dialCode: '+221',
+    methods: ['Wave Sénégal', 'Orange Money Sénégal', 'Free Money', 'Virement Bancaire'],
+  },
+  {
+    country: 'Togo',
+    dialCode: '+228',
+    methods: ['TMoney', 'Flooz Moov', 'Virement Bancaire'],
   },
 ];
 
-export const DEPOSIT_PAYMENT_URL = 'https://payliv.shop/pay/plv_rkermm7f';
+export const ELIGIBLE_COUNTRIES = COUNTRY_OPTIONS.map((c) => c.country);
+export const ELIGIBLE_DIAL_CODES = COUNTRY_OPTIONS.map((c) => c.dialCode);
+
+export function isEligibleCountry(country?: string, dialCode?: string): boolean {
+  const cleanCountry = (country || '').trim();
+  const cleanDial = (dialCode || '').trim();
+  if (!cleanCountry && !cleanDial) return false;
+  return COUNTRY_OPTIONS.some(
+    (opt) =>
+      (!cleanCountry || opt.country === cleanCountry) &&
+      (!cleanDial || opt.dialCode === cleanDial)
+  );
+}
+
+export function validateEligiblePhone(
+  dialCode: string,
+  rawPhone: string,
+  country?: string
+): { ok: true; cleanDigits: string; fullPhone: string } | { ok: false; error: string } {
+  const cleanDial = dialCode.trim();
+  if (!isEligibleCountry(country, cleanDial)) {
+    return {
+      ok: false,
+      error:
+        'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.',
+    };
+  }
+
+  const compact = rawPhone.replace(/\s+/g, '').trim();
+  const dialDigits = cleanDial.replace(/\D/g, '');
+
+  if (compact.startsWith('+') || compact.startsWith('00')) {
+    const intlDigits = compact.replace(/^\+/, '').replace(/^00/, '').replace(/\D/g, '');
+    if (!intlDigits.startsWith(dialDigits)) {
+      return {
+        ok: false,
+        error:
+          'Indicatif non éligible. Seuls le Bénin (+229), le Cameroun (+237), le Burkina Faso (+226), le Sénégal (+221) et le Togo (+228) sont autorisés.',
+      };
+    }
+  }
+
+  let digits = compact.replace(/\D/g, '');
+  if (digits.startsWith(`00${dialDigits}`) && digits.length >= dialDigits.length + 7) {
+    digits = digits.slice(2 + dialDigits.length);
+  } else if (digits.startsWith(dialDigits) && digits.length >= dialDigits.length + 7) {
+    digits = digits.slice(dialDigits.length);
+  }
+
+  if (digits.length < 7 || digits.length > 12) {
+    return {
+      ok: false,
+      error: 'Veuillez saisir un numéro de téléphone valide pour le pays sélectionné.',
+    };
+  }
+
+  return {
+    ok: true,
+    cleanDigits: digits,
+    fullPhone: `${cleanDial} ${digits}`,
+  };
+}
 
 export const PAYMENT_CHANNELS = [
   {
-    id: 'UEMOA Mobile Money (Burkina · Mali · Sénégal · Bénin)',
-    label: 'Chaîne de recharge (Burkina · UEMOA · Orange / Moov / Wave)',
+    id: 'Mobile Money (Bénin · Burkina Faso · Togo)',
+    label: 'Mobile Money (Bénin · Burkina Faso · Togo)',
   },
   {
-    id: "Wave / Mobile Money (Côte d’Ivoire & Togo)",
-    label: "Chaîne de recharge (Côte d’Ivoire & Togo · Wave / MTN / TMoney)",
+    id: 'Mobile Money & Wave (Cameroun · Sénégal)',
+    label: 'Mobile Money & Wave (Cameroun · Sénégal)',
   },
 ];
 

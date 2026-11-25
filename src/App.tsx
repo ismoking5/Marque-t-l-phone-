@@ -55,7 +55,9 @@ import {
   formatCFA,
   formatDateFr,
   getProjectDailyIncome,
+  isEligibleCountry,
   sanitizeId,
+  validateEligiblePhone,
 } from './data/catalog';
 import {
   OperationType,
@@ -505,7 +507,7 @@ export default function App() {
     };
   }, [cloudUsers, cloudTransactions, cloudInvestments, cloudReferrals, localSyncTick]);
 
-  // Read URL referral params
+  // Read URL referral params & payment return status
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref');
@@ -513,6 +515,37 @@ export default function App() {
     if (ref) localStorage.setItem(REF_UID_KEY, sanitizeId(ref));
     if (code) setInitialInviteCode(sanitizeId(code));
     else if (ref) setInitialInviteCode(sanitizeId(ref));
+
+    const returnToken = params.get('token');
+    const depositReturn = params.get('deposit_return');
+    if (returnToken || depositReturn) {
+      if (returnToken && /^[a-zA-Z0-9_-]{6,128}$/.test(returnToken)) {
+        void (async () => {
+          let authToken = '';
+          if (isSupabaseConfigured && supabase) {
+            const { data } = await supabase.auth.getSession();
+            authToken = data.session?.access_token || '';
+          }
+          const res = await fetch(`/api/deposit/verify?token=${encodeURIComponent(returnToken)}`, {
+            headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+          }).catch(() => null);
+          if (res && res.ok) {
+            const info = (await res.json().catch(() => ({}))) as { status?: string; amount?: number };
+            if (info.status === 'paid') {
+              showToast('Paiement confirmé ! Votre dépôt est en cours de traitement.');
+            } else if (info.status === 'failed') {
+              showToast('Le paiement n’a pas abouti ou a été annulé.');
+            } else {
+              showToast('Paiement en attente de confirmation.');
+            }
+          }
+        })();
+      }
+      params.delete('token');
+      params.delete('deposit_return');
+      const nextQs = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${nextQs ? `?${nextQs}` : ''}`);
+    }
   }, []);
 
   // Supabase Auth & session bootstrap (active when VITE_SUPABASE_* is configured)
@@ -591,6 +624,12 @@ export default function App() {
     const accounts = loadAccounts();
     const record = accounts[phoneSessionKey];
     if (record) {
+      const dialPrefix = phoneSessionKey.split('_')[0] || '';
+      if (!isEligibleCountry(undefined, dialPrefix)) {
+        setPhoneSessionKey(null);
+        localStorage.removeItem(SESSION_KEY);
+        return;
+      }
       const expectedRole: 'admin' | 'user' = isUniqueAdminPhone(record.profile.phone)
         ? 'admin'
         : 'user';
@@ -947,6 +986,16 @@ export default function App() {
   };
 
   const handlePhoneAuth = async (payload: PhoneAuthPayload) => {
+    if (!isEligibleCountry(payload.country, payload.dialCode)) {
+      throw new Error(
+        'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
+      );
+    }
+    const phoneCheck = validateEligiblePhone(payload.dialCode, payload.phone, payload.country);
+    if (phoneCheck.ok === false) {
+      throw new Error(phoneCheck.error);
+    }
+
     if (isSupabaseConfigured && supabase) {
       const profile = await sbPhoneAuth(payload);
       const { data: sessionData } = await supabase.auth.getSession();
@@ -969,9 +1018,9 @@ export default function App() {
     }
 
     const dialCode = payload.dialCode.trim();
-    const cleanPhone = normalizeLocalPhoneNumber(dialCode, payload.phone);
+    const cleanPhone = phoneCheck.cleanDigits;
     const key = `${dialCode}_${cleanPhone}`;
-    const fullPhone = `${dialCode} ${cleanPhone}`;
+    const fullPhone = phoneCheck.fullPhone;
     const accounts = loadAccounts();
     const isAdminCredential = isUniqueAdminPhone(fullPhone);
     const defaultMethod =
@@ -1202,17 +1251,69 @@ export default function App() {
     showToast('Vous êtes déconnecté.');
   };
 
+  const initiateGatewayCheckout = async (params: {
+    amount: number;
+    method: string;
+    phoneOrAccount: string;
+    txId: string;
+  }): Promise<{ checkoutUrl?: string; message?: string }> => {
+    try {
+      let authToken = '';
+      if (isSupabaseConfigured && supabase) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        authToken = sessionData.session?.access_token || '';
+      }
+      const res = await fetch('/api/deposit/initiate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({
+          amount: Math.round(params.amount),
+          method: params.method,
+          phoneOrAccount: params.phoneOrAccount,
+          txId: params.txId,
+          returnUrl: `${window.location.origin}/?deposit_return=1`,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        checkoutUrl?: string;
+        message?: string;
+      };
+      if (res.ok && json.ok && json.checkoutUrl) {
+        return { checkoutUrl: json.checkoutUrl };
+      }
+      return { message: json.message };
+    } catch {
+      return {};
+    }
+  };
+
   const handleDeposit = async (
     amount: number,
     method: string,
     phoneOrAccount: string,
     instantCredit: boolean
-  ) => {
+  ): Promise<{ checkoutUrl?: string; message?: string } | void> => {
     if (!userProfile) throw new Error('Veuillez vous connecter pour confirmer votre recharge.');
     if (isSupabaseConfigured && supabase) {
-      await sbCreateDeposit(amount, method, phoneOrAccount);
+      const createdTxId = await sbCreateDeposit(amount, method, phoneOrAccount);
       await refreshSupabaseState(userProfile, sbUser?.email);
-      showToast(`Demande de dépôt de ${formatCFA(amount)} enregistrée (en attente de validation).`);
+      const gateway = await initiateGatewayCheckout({
+        amount,
+        method,
+        phoneOrAccount,
+        txId: createdTxId || `dep_${Date.now()}`,
+      });
+      if (gateway.checkoutUrl) {
+        return { checkoutUrl: gateway.checkoutUrl };
+      }
+      showToast(
+        gateway.message ||
+          `Demande de dépôt de ${formatCFA(amount)} enregistrée (en attente de validation).`
+      );
       return;
     }
     const txId = sanitizeId(`tx_dep_${Date.now()}_${userProfile.uid.slice(0, 6)}`);
@@ -1242,6 +1343,15 @@ export default function App() {
         },
         transactions: [tx, ...rec.transactions],
       }));
+      const gateway = await initiateGatewayCheckout({
+        amount,
+        method,
+        phoneOrAccount,
+        txId,
+      });
+      if (gateway.checkoutUrl) {
+        return { checkoutUrl: gateway.checkoutUrl };
+      }
       showToast(
         instantCredit
           ? `Solde crédité de ${formatCFA(amount)}.`
@@ -3421,7 +3531,7 @@ export default function App() {
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-xs sm:text-sm font-bold text-[#0F172A] uppercase truncate">
                       {(userProfile?.withdrawalMethod || wdMethod || 'ORANGE MONEY')
-                        .replace(/Burkina|Côte d’Ivoire|Côte d'Ivoire/gi, '')
+                        .replace(/Burkina|Bénin|Cameroun|Sénégal|Togo/gi, '')
                         .trim() || 'MOBILE MONEY'}
                     </p>
                     <p className="text-[11px] sm:text-xs text-[#475569] truncate">

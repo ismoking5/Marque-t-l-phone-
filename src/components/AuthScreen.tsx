@@ -1,6 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
-import { COUNTRY_OPTIONS } from '../data/catalog';
+import {
+  COUNTRY_OPTIONS,
+  isEligibleCountry,
+  validateEligiblePhone,
+} from '../data/catalog';
 import type { CountryOption, PhoneAuthPayload } from '../types';
 import { BrandLogo } from './Brand';
 
@@ -70,27 +74,33 @@ export function AuthScreen({
     e.preventDefault();
     setErrorMsg(null);
 
-    const cleanedPhone = phone.replace(/\s+/g, '').trim();
-    if (cleanedPhone.length < 6) {
-      setErrorMsg('Veuillez saisir un numéro de téléphone valide.');
+    const activeCountry = mode === 'login' ? loginCountry : registerCountry;
+    if (!activeCountry || !isEligibleCountry(activeCountry.country, activeCountry.dialCode)) {
+      setErrorMsg(
+        'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
+      );
       return;
     }
+
+    const phoneValidation = validateEligiblePhone(
+      activeCountry.dialCode,
+      phone,
+      activeCountry.country
+    );
+    if (phoneValidation.ok === false) {
+      setErrorMsg(phoneValidation.error);
+      return;
+    }
+    const cleanedPhone = phoneValidation.cleanDigits;
+
     if (password.length < 6) {
       setErrorMsg('Veuillez saisir un mot de passe (minimum 6 caractères).');
       return;
     }
-    if (mode === 'register') {
-      if (!registerCountry) {
-        setErrorMsg('Veuillez sélectionner votre pays.');
-        return;
-      }
-      if (password !== confirmPassword) {
-        setErrorMsg('Les deux mots de passe ne correspondent pas.');
-        return;
-      }
+    if (mode === 'register' && password !== confirmPassword) {
+      setErrorMsg('Les deux mots de passe ne correspondent pas.');
+      return;
     }
-
-    const activeCountry = mode === 'login' ? loginCountry : registerCountry || loginCountry;
     setSubmitting(true);
     try {
       if (mode === 'login') {

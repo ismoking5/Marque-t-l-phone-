@@ -6,7 +6,9 @@ import {
   DEFAULT_SETTINGS,
   OFFICIAL_VIP_CATALOG,
   clampStr,
+  isEligibleCountry,
   sanitizeId,
+  validateEligiblePhone,
 } from '../data/catalog';
 import { supabase } from '../supabase';
 import type {
@@ -63,6 +65,14 @@ export function isAdminEmail(email?: string | null): boolean {
   const lower = email.trim().toLowerCase();
   const adminPhoneEmail = `${DEFAULT_ADMIN_PHONE.replace(/\D/g, '')}@aureliamobile.africa`;
   return lower === ADMIN_EMAIL.toLowerCase() || lower === adminPhoneEmail;
+}
+
+export function isEligibleAuthEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const lower = email.trim().toLowerCase();
+  if (lower === ADMIN_EMAIL.toLowerCase()) return true;
+  const localPart = lower.split('@')[0] || '';
+  return ['229', '237', '226', '221', '228'].some((prefix) => localPart.startsWith(prefix));
 }
 
 function mapProfileRow(row: Record<string, unknown>): UserProfile {
@@ -219,6 +229,13 @@ export async function sbEnsureProfileForAuthUser(
 ): Promise<UserProfile> {
   if (!supabase) throw new Error('Supabase non configuré.');
 
+  if (!isEligibleAuthEmail(email)) {
+    await supabase.auth.signOut();
+    throw new Error(
+      'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
+    );
+  }
+
   const existingRes = await supabase
     .from('profiles')
     .select('*')
@@ -305,8 +322,17 @@ export async function sbPhoneAuth(payload: PhoneAuthPayload): Promise<UserProfil
   if (!supabase) throw new Error('Supabase non configuré.');
 
   const dialCode = payload.dialCode.trim();
-  const cleanPhone = normalizePhoneDigits(dialCode, payload.phone);
-  const fullPhone = `${dialCode} ${cleanPhone}`;
+  if (!isEligibleCountry(payload.country, dialCode)) {
+    throw new Error(
+      'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
+    );
+  }
+  const phoneCheck = validateEligiblePhone(dialCode, payload.phone, payload.country);
+  if (phoneCheck.ok === false) {
+    throw new Error(phoneCheck.error);
+  }
+  const cleanPhone = phoneCheck.cleanDigits;
+  const fullPhone = phoneCheck.fullPhone;
   const isAdminCredential = isUniqueAdminPhone(fullPhone);
   const email = phoneToAuthEmail(dialCode, cleanPhone);
   const referralCode = sanitizeId(
@@ -496,14 +522,15 @@ export async function sbCreateDeposit(
   amount: number,
   method: string,
   phoneOrAccount: string
-): Promise<void> {
+): Promise<string> {
   if (!supabase) throw new Error('Supabase non configuré.');
-  const { error } = await supabase.rpc('create_deposit', {
+  const { data, error } = await supabase.rpc('create_deposit', {
     p_amount: Math.round(amount),
     p_method: clampStr(method, 2, 60),
     p_phone_or_account: clampStr(phoneOrAccount, 2, 80),
   });
   if (error) throw new Error(error.message);
+  return typeof data === 'string' ? data : '';
 }
 
 export async function sbRequestWithdrawal(
