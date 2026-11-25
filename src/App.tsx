@@ -22,6 +22,7 @@ import {
   Volume2,
   Wallet,
 } from 'lucide-react';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import {
   User as FirebaseUser,
   onAuthStateChanged,
@@ -64,6 +65,28 @@ import {
   signInWithGooglePopup,
   signOutFirebase,
 } from './firebase';
+import {
+  isAdminEmail,
+  isSupabaseSchemaMissing,
+  sbAdminAdjustBalance,
+  sbAdminGiftProduct,
+  sbAdminProcessTransaction,
+  sbAdminSaveProject,
+  sbAdminSaveSettings,
+  sbAdminSyncOfficialCatalog,
+  sbChangePassword,
+  sbCreateDeposit,
+  sbEnsureProfileForAuthUser,
+  sbFetchPublicData,
+  sbLoadAdminData,
+  sbLoadUserData,
+  sbPhoneAuth,
+  sbPurchaseVip,
+  sbRequestWithdrawal,
+  sbSaveWithdrawalAccount,
+  sbSyncDailyPayouts,
+} from './lib/supabaseDb';
+import { isSupabaseConfigured, supabase } from './supabase';
 import type {
   InvestmentItem,
   PhoneAccountRecord,
@@ -260,6 +283,8 @@ function transactionStatusLabel(status: TransactionStatus): string {
 }
 
 export default function App() {
+  const [sbUser, setSbUser] = useState<SupabaseUser | null>(null);
+  const [supabaseSchemaMissing, setSupabaseSchemaMissing] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [phoneSessionKey, setPhoneSessionKey] = useState<string | null>(() => {
     try {
@@ -330,6 +355,14 @@ export default function App() {
   };
 
   const isAdmin = useMemo(() => {
+    if (isSupabaseConfigured) {
+      return Boolean(
+        sbUser &&
+          (isAdminEmail(sbUser.email) ||
+            isUniqueAdminPhone(userProfile?.phone) ||
+            userProfile?.role === 'admin')
+      );
+    }
     const adminEmailLower = ADMIN_EMAIL.toLowerCase();
     if (firebaseUser) {
       return !!(
@@ -341,7 +374,7 @@ export default function App() {
       return isUniqueAdminPhone(userProfile.phone);
     }
     return false;
-  }, [firebaseUser, phoneSessionKey, userProfile]);
+  }, [sbUser, firebaseUser, phoneSessionKey, userProfile]);
 
   useEffect(() => {
     if (activeTab === 'admin' && !isAdmin) {
@@ -349,8 +382,63 @@ export default function App() {
     }
   }, [activeTab, isAdmin]);
 
+  const refreshSupabaseState = async (activeProfile?: UserProfile | null, email?: string | null) => {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      const pub = await sbFetchPublicData();
+      setSupabaseSchemaMissing(pub.schemaMissing);
+      setProjects(pub.projects);
+      setSettings(pub.settings);
+      if (pub.schemaMissing) return;
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const sessionUser = sessionData.session?.user;
+      if (!sessionUser && !activeProfile) return;
+
+      const credited = await sbSyncDailyPayouts();
+      let currentProf = activeProfile || null;
+      if (sessionUser) {
+        currentProf = await sbEnsureProfileForAuthUser(
+          sessionUser.id,
+          sessionUser.email || email || activeProfile?.email || ''
+        );
+        setUserProfile(currentProf);
+      }
+      if (!currentProf) return;
+      if (credited > 0) {
+        showToast(`+${formatCFA(credited)} de gains quotidiens crédités sur votre solde.`);
+      }
+
+      const userData = await sbLoadUserData(currentProf.uid);
+      setInvestments(userData.investments);
+      setTransactions(userData.transactions);
+      setReferrals(userData.referrals);
+
+      const adminNow =
+        isAdminEmail(email || sessionUser?.email || currentProf.email) ||
+        isUniqueAdminPhone(currentProf.phone) ||
+        currentProf.role === 'admin';
+      if (adminNow) {
+        const adminData = await sbLoadAdminData();
+        setCloudUsers(adminData.users);
+        setCloudTransactions(adminData.transactions);
+        setCloudInvestments(adminData.investments);
+        setCloudReferrals(adminData.referrals);
+        if (adminData.projects.length > 0) {
+          setProjects(adminData.projects);
+        }
+      }
+    } catch (err) {
+      if (isSupabaseSchemaMissing(err)) {
+        setSupabaseSchemaMissing(true);
+      } else {
+        console.debug('Supabase refresh info:', err);
+      }
+    }
+  };
+
   const { allUsers, allTransactions, allInvestments, allReferrals } = useMemo(() => {
-    const localList = Object.values(loadAccounts());
+    const localList = isSupabaseConfigured ? [] : Object.values(loadAccounts());
 
     const usersMap = new Map<string, UserProfile>();
     cloudUsers.forEach((u) => usersMap.set(u.uid, u));
@@ -427,9 +515,79 @@ export default function App() {
     else if (ref) setInitialInviteCode(sanitizeId(ref));
   }, []);
 
-  // Load local phone account when not using Firebase Auth
+  // Supabase Auth & session bootstrap (active when VITE_SUPABASE_* is configured)
   useEffect(() => {
-    if (firebaseUser || !phoneSessionKey) return;
+    if (!isSupabaseConfigured || !supabase) return;
+    let active = true;
+
+    const hydrateSession = async (sessionUser: SupabaseUser | null) => {
+      if (!active) return;
+      setSbUser(sessionUser);
+      try {
+        const pub = await sbFetchPublicData();
+        if (!active) return;
+        setSupabaseSchemaMissing(pub.schemaMissing);
+        setProjects(pub.projects);
+        setSettings(pub.settings);
+
+        if (sessionUser && !pub.schemaMissing) {
+          const prof = await sbEnsureProfileForAuthUser(
+            sessionUser.id,
+            sessionUser.email || ''
+          );
+          if (!active) return;
+          setUserProfile(prof);
+          setWdCountry(prof.withdrawalCountry || 'Burkina Faso');
+          setWdMethod(prof.withdrawalMethod || 'Orange Money Burkina');
+          setWdAccount(prof.withdrawalAccount || prof.phone || '');
+          setWdHolder(prof.withdrawalHolder || prof.displayName || '');
+          await refreshSupabaseState(prof, sessionUser.email);
+        } else if (!sessionUser) {
+          setUserProfile(null);
+          setInvestments([]);
+          setTransactions([]);
+          setReferrals([]);
+          setCloudUsers([]);
+          setCloudTransactions([]);
+          setCloudInvestments([]);
+          setCloudReferrals([]);
+        }
+      } catch (err) {
+        if (isSupabaseSchemaMissing(err)) {
+          setSupabaseSchemaMissing(true);
+        }
+      } finally {
+        if (active) setAuthReady(true);
+      }
+    };
+
+    void supabase.auth.getSession().then(({ data }) => {
+      void hydrateSession(data.session?.user ?? null);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      void hydrateSession(session?.user ?? null);
+    });
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // Periodic Supabase refresh while signed in (keeps Admin user list & balances fresh)
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !sbUser || !userProfile) return;
+    void refreshSupabaseState(userProfile, sbUser.email);
+    const timer = window.setInterval(() => {
+      void refreshSupabaseState(userProfile, sbUser.email);
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [sbUser?.id, activeTab]);
+
+  // Load local phone account when not using Supabase or Firebase Auth
+  useEffect(() => {
+    if (isSupabaseConfigured || firebaseUser || !phoneSessionKey) return;
     const accounts = loadAccounts();
     const record = accounts[phoneSessionKey];
     if (record) {
@@ -458,8 +616,9 @@ export default function App() {
     }
   }, [firebaseUser, phoneSessionKey, localSyncTick]);
 
-  // Firebase Auth listener
+  // Firebase Auth listener (fallback only when Supabase is not configured)
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
@@ -524,9 +683,9 @@ export default function App() {
     }
   }
 
-  // Real-time Firestore listeners for public catalog, settings, and signed-in user's data
+  // Real-time Firestore listeners (fallback only when Supabase is not configured)
   useEffect(() => {
-    if (!authReady) return;
+    if (isSupabaseConfigured || !authReady) return;
     const unsubs: (() => void)[] = [];
 
     unsubs.push(
@@ -618,9 +777,9 @@ export default function App() {
     return () => unsubs.forEach((u) => u());
   }, [authReady, firebaseUser]);
 
-  // Admin cloud listeners
+  // Admin cloud listeners (Firestore fallback only when Supabase is not configured)
   useEffect(() => {
-    if (!authReady || !firebaseUser || !isAdmin) return;
+    if (isSupabaseConfigured || !authReady || !firebaseUser || !isAdmin) return;
     const u1 = onSnapshot(
       collection(db, 'users'),
       (snap) => setCloudUsers(snap.docs.map((d) => d.data() as UserProfile)),
@@ -661,9 +820,9 @@ export default function App() {
     };
   }, [authReady, firebaseUser, isAdmin]);
 
-  // Automatic 24h daily VIP payout synchronization
+  // Automatic 24h daily VIP payout synchronization (local/Firestore fallback mode)
   useEffect(() => {
-    if (!userProfile || investments.length === 0 || payoutSyncingRef.current) return;
+    if (isSupabaseConfigured || !userProfile || investments.length === 0 || payoutSyncingRef.current) return;
     const nowMs = Date.now();
     const pendingUpdates = investments
       .filter((inv) => inv.status === 'active')
@@ -788,6 +947,27 @@ export default function App() {
   };
 
   const handlePhoneAuth = async (payload: PhoneAuthPayload) => {
+    if (isSupabaseConfigured && supabase) {
+      const profile = await sbPhoneAuth(payload);
+      const { data: sessionData } = await supabase.auth.getSession();
+      setSbUser(sessionData.session?.user ?? null);
+      setUserProfile(profile);
+      setWdCountry(profile.withdrawalCountry || payload.country);
+      setWdMethod(profile.withdrawalMethod || 'Orange Money Burkina');
+      setWdAccount(profile.withdrawalAccount || profile.phone || '');
+      setWdHolder(profile.withdrawalHolder || profile.displayName || '');
+      setActiveTab('home');
+      await refreshSupabaseState(profile, sessionData.session?.user?.email);
+      showToast(
+        payload.mode === 'register'
+          ? 'Inscription réussie ! Bienvenue sur AURELIA MOBILE.'
+          : isUniqueAdminPhone(profile.phone)
+          ? 'Connexion administrateur réussie.'
+          : 'Connexion réussie.'
+      );
+      return;
+    }
+
     const dialCode = payload.dialCode.trim();
     const cleanPhone = normalizeLocalPhoneNumber(dialCode, payload.phone);
     const key = `${dialCode}_${cleanPhone}`;
@@ -1002,6 +1182,10 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (isSupabaseConfigured && supabase) {
+      await supabase.auth.signOut();
+      setSbUser(null);
+    }
     localStorage.removeItem(SESSION_KEY);
     setPhoneSessionKey(null);
     if (firebaseUser) await signOutFirebase();
@@ -1009,6 +1193,10 @@ export default function App() {
     setInvestments([]);
     setTransactions([]);
     setReferrals([]);
+    setCloudUsers([]);
+    setCloudTransactions([]);
+    setCloudInvestments([]);
+    setCloudReferrals([]);
     setActiveTab('home');
     setAccountSubpage('menu');
     showToast('Vous êtes déconnecté.');
@@ -1021,6 +1209,12 @@ export default function App() {
     instantCredit: boolean
   ) => {
     if (!userProfile) throw new Error('Veuillez vous connecter pour confirmer votre recharge.');
+    if (isSupabaseConfigured && supabase) {
+      await sbCreateDeposit(amount, method, phoneOrAccount);
+      await refreshSupabaseState(userProfile, sbUser?.email);
+      showToast(`Demande de dépôt de ${formatCFA(amount)} enregistrée (en attente de validation).`);
+      return;
+    }
     const txId = sanitizeId(`tx_dep_${Date.now()}_${userProfile.uid.slice(0, 6)}`);
     const status: TransactionStatus = instantCredit ? 'completed' : 'pending';
 
@@ -1090,6 +1284,20 @@ export default function App() {
   const handleWithdraw = async (amount: number, method: string, account: string) => {
     if (!userProfile) throw new Error('Veuillez vous connecter pour confirmer votre retrait.');
     if (amount > userProfile.balance) throw new Error('Solde disponible insuffisant.');
+    if (isSupabaseConfigured && supabase) {
+      await sbRequestWithdrawal(amount, method, account);
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session?.user) {
+        const updatedProf = await sbEnsureProfileForAuthUser(
+          sessionData.session.user.id,
+          sessionData.session.user.email || userProfile.email
+        );
+        setUserProfile(updatedProf);
+        await refreshSupabaseState(updatedProf, sessionData.session.user.email);
+      }
+      showToast(`Demande de retrait de ${formatCFA(amount)} enregistrée.`);
+      return;
+    }
     const txId = sanitizeId(`tx_wit_${Date.now()}_${userProfile.uid.slice(0, 6)}`);
 
     if (!firebaseUser && phoneSessionKey) {
@@ -1153,6 +1361,23 @@ export default function App() {
     const durationDays = project.durationDays || 90;
     const totalCost = unitPrice * qty;
     if (totalCost > userProfile.balance) throw new Error('Solde disponible insuffisant.');
+
+    if (isSupabaseConfigured && supabase) {
+      await sbPurchaseVip(project.id, qty);
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session?.user) {
+        const updatedProf = await sbEnsureProfileForAuthUser(
+          sessionData.session.user.id,
+          sessionData.session.user.email || userProfile.email
+        );
+        setUserProfile(updatedProf);
+        await refreshSupabaseState(updatedProf, sessionData.session.user.email);
+      }
+      showToast(
+        `${qty > 1 ? `${qty}x ` : ''}${project.title} activé (${formatCFA(unitDaily * qty)}/jour pendant ${durationDays}j).`
+      );
+      return;
+    }
 
     const nowMs = Date.now();
 
@@ -1348,6 +1573,32 @@ export default function App() {
       showToast('Veuillez saisir un numéro ou compte de retrait valide.');
       return;
     }
+    if (isSupabaseConfigured && supabase && userProfile) {
+      setSavingWd(true);
+      try {
+        await sbSaveWithdrawalAccount(userProfile.uid, {
+          country: wdCountry,
+          method: wdMethod,
+          account: wdAccount.trim(),
+          holder: wdHolder.trim() || userProfile.displayName,
+        });
+        setUserProfile({
+          ...userProfile,
+          withdrawalCountry: wdCountry,
+          withdrawalMethod: wdMethod,
+          withdrawalAccount: wdAccount.trim(),
+          withdrawalHolder: wdHolder.trim() || userProfile.displayName,
+          phone: wdAccount.trim() || userProfile.phone,
+        });
+        showToast('Votre compte de retrait a été enregistré.');
+        setShowWdForm(false);
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Erreur lors de l'enregistrement.");
+      } finally {
+        setSavingWd(false);
+      }
+      return;
+    }
     if (!firebaseUser && phoneSessionKey && userProfile) {
       const nowIso = new Date().toISOString();
       mutateLocalAccount((rec) => ({
@@ -1393,10 +1644,10 @@ export default function App() {
   const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault();
     setPasswordFeedback(null);
-    if (newPassword.length < 4) {
+    if (newPassword.length < 6) {
       setPasswordFeedback({
         type: 'error',
-        text: 'Le nouveau mot de passe doit contenir au moins 4 caractères.',
+        text: 'Le nouveau mot de passe doit contenir au moins 6 caractères.',
       });
       return;
     }
@@ -1405,6 +1656,27 @@ export default function App() {
         type: 'error',
         text: 'Les deux mots de passe ne correspondent pas.',
       });
+      return;
+    }
+    if (isSupabaseConfigured && supabase) {
+      setSavingPassword(true);
+      try {
+        await sbChangePassword(newPassword);
+        setNewPassword('');
+        setConfirmNewPassword('');
+        setPasswordFeedback({
+          type: 'success',
+          text: 'Votre mot de passe a été modifié avec succès.',
+        });
+        showToast('Mot de passe mis à jour.');
+      } catch (err) {
+        setPasswordFeedback({
+          type: 'error',
+          text: err instanceof Error ? err.message : 'Erreur lors de la modification.',
+        });
+      } finally {
+        setSavingPassword(false);
+      }
       return;
     }
     if (!firebaseUser && phoneSessionKey) {
@@ -1503,6 +1775,12 @@ export default function App() {
     setProjects(nextList);
     saveLocalProjects(nextList);
 
+    if (isSupabaseConfigured && supabase) {
+      await sbAdminSaveProject(cleaned);
+      await refreshSupabaseState(userProfile, sbUser?.email);
+      return;
+    }
+
     if (!firebaseUser) return;
     try {
       const ref = doc(db, 'projects', id);
@@ -1520,6 +1798,11 @@ export default function App() {
   const handleAdminSyncOfficialCatalog = async () => {
     setProjects(OFFICIAL_VIP_CATALOG);
     saveLocalProjects(OFFICIAL_VIP_CATALOG);
+    if (isSupabaseConfigured && supabase) {
+      await sbAdminSyncOfficialCatalog();
+      await refreshSupabaseState(userProfile, sbUser?.email);
+      return;
+    }
     if (!firebaseUser) return;
     try {
       for (const item of OFFICIAL_VIP_CATALOG) {
@@ -1543,6 +1826,11 @@ export default function App() {
     tx: TransactionItem,
     nextStatus: 'approved' | 'rejected'
   ) => {
+    if (isSupabaseConfigured && supabase) {
+      await sbAdminProcessTransaction(tx.id, nextStatus);
+      await refreshSupabaseState(userProfile, sbUser?.email);
+      return;
+    }
     const accounts = loadAccounts();
     const targetAcc = Object.values(accounts).find((a) => a.profile.uid === tx.userId);
     if (targetAcc) {
@@ -1604,6 +1892,11 @@ export default function App() {
     delta: number,
     reason: string
   ) => {
+    if (isSupabaseConfigured && supabase) {
+      await sbAdminAdjustBalance(targetUser.uid, Math.round(delta), reason);
+      await refreshSupabaseState(userProfile, sbUser?.email);
+      return;
+    }
     const nextBalance = Math.max(0, Math.round(targetUser.balance + delta));
     const txId = sanitizeId(`tx_cred_${Date.now()}_${targetUser.uid.slice(0, 6)}`);
     const nowIso = new Date().toISOString();
@@ -1673,6 +1966,11 @@ export default function App() {
     reason = 'Produit offert par administration'
   ) => {
     const qty = Math.max(1, Math.min(20, Math.round(quantity)));
+    if (isSupabaseConfigured && supabase) {
+      await sbAdminGiftProduct(targetUser.uid, project.id, qty, reason);
+      await refreshSupabaseState(userProfile, sbUser?.email);
+      return;
+    }
     const unitPrice = Math.max(500, Math.round(project.minInvestment));
     const unitDaily = Math.max(50, Math.round(getProjectDailyIncome(project)));
     const durationDays = Math.max(1, Math.min(3650, Math.round(project.durationDays || 90)));
@@ -1817,6 +2115,13 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
     setSettings(cleaned);
+    if (isSupabaseConfigured && supabase) {
+      const saved = await sbAdminSaveSettings(cleaned);
+      setSettings(saved);
+      saveLocalSettings(saved, false);
+      return;
+    }
+
     saveLocalSettings(cleaned, !firebaseUser);
 
     if (!firebaseUser) return;
@@ -1967,7 +2272,7 @@ export default function App() {
   }, [referrals, allReferrals, userProfile]);
 
   // Render Auth screen when logged out
-  if (authReady && !(firebaseUser || phoneSessionKey)) {
+  if (authReady && !(isSupabaseConfigured ? sbUser : firebaseUser || phoneSessionKey)) {
     return (
       <>
         {toastMsg && (
@@ -1976,10 +2281,22 @@ export default function App() {
             <span>{toastMsg}</span>
           </div>
         )}
+        {isSupabaseConfigured && supabaseSchemaMissing && (
+          <div className="max-w-lg mx-auto mt-3 px-4">
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-1">
+              <p className="font-extrabold">Configuration Supabase requise (1 fois)</p>
+              <p className="leading-relaxed">
+                Exécutez la migration SQL dans votre projet Supabase (SQL Editor) et désactivez
+                « Confirm email » dans Authentication → Providers → Email pour activer les
+                inscriptions par téléphone.
+              </p>
+            </div>
+          </div>
+        )}
         <AuthScreen
           initialInvitationCode={initialInviteCode}
           onSubmitPhoneAuth={handlePhoneAuth}
-          onGoogleAuth={handleGoogleSignIn}
+          onGoogleAuth={isSupabaseConfigured ? undefined : handleGoogleSignIn}
         />
       </>
     );
@@ -3490,8 +3807,8 @@ export default function App() {
               onAdjustUserBalance={handleAdminAdjustBalance}
               onGiftProduct={handleAdminGiftProduct}
               onSaveSettings={handleAdminSaveSettings}
-              isCloudConnected={!!firebaseUser}
-              onConnectGoogleCloud={handleGoogleSignIn}
+              isCloudConnected={isSupabaseConfigured || !!firebaseUser}
+              onConnectGoogleCloud={isSupabaseConfigured ? undefined : handleGoogleSignIn}
             />
           </main>
         )}
@@ -3547,6 +3864,7 @@ export default function App() {
         userProfile={userProfile}
         settings={settings}
         onSubmitDeposit={handleDeposit}
+        requireApprovalOnly={isSupabaseConfigured}
       />
 
       <WithdrawModal

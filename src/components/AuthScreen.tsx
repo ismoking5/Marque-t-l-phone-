@@ -38,11 +38,9 @@ export function AuthScreen({
         const parsed = JSON.parse(saved) as {
           dialCode?: string;
           phone?: string;
-          password?: string;
           remember?: boolean;
         };
         if (parsed.phone) setPhone(parsed.phone);
-        if (parsed.password) setPassword(parsed.password);
         if (typeof parsed.remember === 'boolean') setRememberPassword(parsed.remember);
         if (parsed.dialCode) {
           const found = COUNTRY_OPTIONS.find((c) => c.dialCode === parsed.dialCode);
@@ -77,8 +75,8 @@ export function AuthScreen({
       setErrorMsg('Veuillez saisir un numéro de téléphone valide.');
       return;
     }
-    if (password.length < 4) {
-      setErrorMsg('Veuillez saisir un mot de passe (minimum 4 caractères).');
+    if (password.length < 6) {
+      setErrorMsg('Veuillez saisir un mot de passe (minimum 6 caractères).');
       return;
     }
     if (mode === 'register') {
@@ -102,7 +100,6 @@ export function AuthScreen({
             JSON.stringify({
               dialCode: activeCountry.dialCode,
               phone: cleanedPhone,
-              password,
               remember: true,
             })
           );
@@ -115,7 +112,6 @@ export function AuthScreen({
           JSON.stringify({
             dialCode: activeCountry.dialCode,
             phone: cleanedPhone,
-            password,
             remember: true,
           })
         );
@@ -202,6 +198,7 @@ export function AuthScreen({
           <div>
             <input
               type="tel"
+              autoComplete="tel-national"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="Numéro de téléphone"
@@ -213,6 +210,7 @@ export function AuthScreen({
           <div>
             <input
               type="password"
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Veuillez saisir votre mot de passe"
@@ -226,6 +224,7 @@ export function AuthScreen({
               <div>
                 <input
                   type="password"
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirmer le mot de passe"

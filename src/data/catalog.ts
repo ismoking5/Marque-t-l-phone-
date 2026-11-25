@@ -17,6 +17,17 @@ export const BRAND_IMAGES = {
   ceramic: phoneCeramicImg,
 } as const;
 
+export function resolveBrandImageUrl(url?: string): string {
+  if (!url) return BRAND_IMAGES.hero;
+  const trimmed = url.trim();
+  if (trimmed === 'preset:hero' || trimmed.includes('hero_flagship_phones')) return BRAND_IMAGES.hero;
+  if (trimmed === 'preset:titanium' || trimmed.includes('phone_compact_titanium')) return BRAND_IMAGES.titanium;
+  if (trimmed === 'preset:foldable' || trimmed.includes('phone_foldable_edition')) return BRAND_IMAGES.foldable;
+  if (trimmed === 'preset:ceramic' || trimmed.includes('phone_sovereign_ceramic')) return BRAND_IMAGES.ceramic;
+  if (/^(https?:\/\/|\/|data:image\/)/i.test(trimmed)) return trimmed;
+  return BRAND_IMAGES.hero;
+}
+
 export const COUNTRY_OPTIONS: CountryOption[] = [
   {
     country: 'Burkina Faso',

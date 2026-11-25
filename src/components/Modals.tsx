@@ -35,6 +35,7 @@ export function DepositModal({
   userProfile,
   settings,
   onSubmitDeposit,
+  requireApprovalOnly = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -46,11 +47,12 @@ export function DepositModal({
     phoneOrAccount: string,
     instantCredit: boolean
   ) => Promise<void>;
+  requireApprovalOnly?: boolean;
 }) {
   const [amountInput, setAmountInput] = useState('5000');
   const [channel, setChannel] = useState(PAYMENT_CHANNELS[0].id);
   const [phoneInput, setPhoneInput] = useState(userProfile?.phone || '+226 ');
-  const [instantCredit, setInstantCredit] = useState(true);
+  const [instantCredit, setInstantCredit] = useState(!requireApprovalOnly);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -206,19 +208,21 @@ export function DepositModal({
               </div>
             </div>
 
-            <div className="flex items-center justify-between px-1 pt-1">
-              <label className="flex items-center justify-between w-full cursor-pointer min-h-[36px]">
-                <span className="text-[11px] text-[#475569] font-medium">
-                  Créditer immédiatement le solde après confirmation
-                </span>
-                <input
-                  type="checkbox"
-                  checked={instantCredit}
-                  onChange={(e) => setInstantCredit(e.target.checked)}
-                  className="w-4 h-4 accent-[#0F172A] rounded cursor-pointer"
-                />
-              </label>
-            </div>
+            {!requireApprovalOnly && (
+              <div className="flex items-center justify-between px-1 pt-1">
+                <label className="flex items-center justify-between w-full cursor-pointer min-h-[36px]">
+                  <span className="text-[11px] text-[#475569] font-medium">
+                    Créditer immédiatement le solde après confirmation
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={instantCredit}
+                    onChange={(e) => setInstantCredit(e.target.checked)}
+                    className="w-4 h-4 accent-[#0F172A] rounded cursor-pointer"
+                  />
+                </label>
+              </div>
+            )}
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
               <a

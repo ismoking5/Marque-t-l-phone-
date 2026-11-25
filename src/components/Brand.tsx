@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Smartphone } from 'lucide-react';
+import { resolveBrandImageUrl } from '../data/catalog';
 
 export function BrandEmblem({
   sizeClass = 'w-12 h-12 sm:w-14 sm:h-14',
@@ -124,8 +125,9 @@ export function SafeImage({
   className?: string;
 }) {
   const [hasError, setHasError] = useState(false);
+  const resolvedSrc = src ? resolveBrandImageUrl(src) : '';
 
-  if (hasError || !src) {
+  if (hasError || !resolvedSrc) {
     return (
       <div
         className={`bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#334155] flex flex-col items-center justify-center text-white p-4 ${className}`}
@@ -140,7 +142,7 @@ export function SafeImage({
 
   return (
     <img
-      src={src}
+      src={resolvedSrc}
       alt={alt}
       referrerPolicy="no-referrer"
       onError={() => setHasError(true)}
