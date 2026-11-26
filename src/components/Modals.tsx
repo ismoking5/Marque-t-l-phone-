@@ -22,6 +22,7 @@ import {
   PAYMENT_CHANNELS,
   QUICK_DEPOSIT_AMOUNTS,
   SUPPORT_CHANNELS,
+  TELEGRAM_GROUP_URL,
   formatCFA,
   getProjectDailyIncome,
 } from '../data/catalog';
@@ -1061,3 +1062,110 @@ export function ReferralModal({
     </div>
   );
 }
+
+export function InfoWelcomeModal({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-3.5 sm:p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="info-welcome-title"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md max-h-[90vh] bg-white rounded-3xl shadow-2xl border border-[#CBD5E1] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative h-44 sm:h-48 w-full bg-[#0F172A] shrink-0 overflow-hidden">
+          <SafeImage
+            src={BRAND_IMAGES.brandShowcase}
+            alt="Gamme officielle de smartphones AURELIA MOBILE"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#020617]/90 via-[#0F172A]/35 to-black/25" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-3 right-3 w-11 h-11 rounded-full bg-black/45 hover:bg-black/65 text-white flex items-center justify-center transition-colors cursor-pointer"
+            aria-label="Fermer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <div className="absolute bottom-3.5 left-5 right-5 flex items-end justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-bold tracking-wider uppercase text-[#F5C533]">
+                AURELIA MOBILE
+              </p>
+              <h3
+                id="info-welcome-title"
+                className="text-xl sm:text-2xl font-extrabold font-display tracking-tight text-white leading-tight"
+              >
+                INFORMATION
+              </h3>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5 overflow-y-auto space-y-3 text-[13px] sm:text-sm text-[#0F172A] leading-relaxed">
+          <p className="font-bold text-[#0F172A]">Investissez 4 000 FCFA.</p>
+
+          <p className="font-semibold text-[#0F172A]">
+            🎁 Bonus d&apos;inscription : <span className="font-mono-num">500 FCFA</span>.
+          </p>
+
+          <p className="font-semibold text-[#0F172A]">
+            📅 Bonus de connexion quotidien : <span className="font-mono-num">30 FCFA</span>.
+          </p>
+
+          <p className="font-semibold text-[#0F172A]">
+            💸 Taux de rendement quotidien : <span className="font-mono-num">20 % à 40 %</span>.
+          </p>
+
+          <p className="text-[#334155]">
+            👥 Invitez d&apos;autres personnes à rejoindre la plateforme et à investir ; vous
+            recevez alors immédiatement une récompense en espèces équivalente à{' '}
+            <strong className="text-[#0F172A]">33 %</strong> du montant de leur investissement.
+          </p>
+
+          <p className="text-[#334155]">
+            ⏰ Les gains issus de vos investissements sont automatiquement crédités sur votre compte
+            toutes les 24 heures et sont disponibles pour un retrait à tout moment.
+          </p>
+
+          <p className="font-medium text-[#0F766E]">
+            📲 Rejoignez notre groupe Telegram pour obtenir plus d&apos;informations sur les moyens
+            de gagner de l&apos;argent.
+          </p>
+        </div>
+
+        <div className="px-5 py-4 bg-[#F8FAFC] border-t border-[#E2E5EC] grid grid-cols-2 gap-2.5 shrink-0">
+          <a
+            href={TELEGRAM_GROUP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-h-[46px] px-3 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors"
+          >
+            <Send className="w-3.5 h-3.5 shrink-0" />
+            <span>Aller sur Telegram &gt;</span>
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-[46px] px-4 py-2 rounded-xl bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] font-extrabold text-xs sm:text-sm flex items-center justify-center whitespace-nowrap transition-colors cursor-pointer"
+          >
+            D&apos;ACCORD
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+

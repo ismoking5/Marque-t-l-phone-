@@ -108,6 +108,7 @@ import { BrandEmblem, BrandLogo, SafeImage } from './components/Brand';
 import {
   BuyVipModal,
   DepositModal,
+  InfoWelcomeModal,
   ReferralModal,
   SupportModal,
   WithdrawModal,
@@ -331,6 +332,7 @@ export default function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(null);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [referralModalOpen, setReferralModalOpen] = useState(false);
+  const [infoPopupOpen, setInfoPopupOpen] = useState(false);
 
   // Withdrawal account form
   const [wdCountry, setWdCountry] = useState('Burkina Faso');
@@ -352,6 +354,20 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const payoutSyncingRef = useRef(false);
   const refreshSupabaseInflightRef = useRef<Promise<void> | null>(null);
+  const infoShownForSessionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!authReady) return;
+    if (!userProfile) {
+      infoShownForSessionRef.current = null;
+      setInfoPopupOpen(false);
+      return;
+    }
+    if (infoShownForSessionRef.current !== userProfile.uid) {
+      infoShownForSessionRef.current = userProfile.uid;
+      setInfoPopupOpen(true);
+    }
+  }, [authReady, userProfile]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -1030,6 +1046,8 @@ export default function App() {
       setWdAccount(profile.withdrawalAccount || profile.phone || '');
       setWdHolder(profile.withdrawalHolder || profile.displayName || '');
       setActiveTab('home');
+      infoShownForSessionRef.current = profile.uid;
+      setInfoPopupOpen(true);
       await refreshSupabaseState(profile, sessionData.session?.user?.email, true);
       showToast(
         payload.mode === 'register'
@@ -1168,6 +1186,8 @@ export default function App() {
       setWdAccount(fullPhone);
       setWdHolder(fullPhone);
       setActiveTab('home');
+      infoShownForSessionRef.current = newProfile.uid;
+      setInfoPopupOpen(true);
       showToast(
         `Inscription réussie ! Bonus de bienvenue de ${formatCFA(REGISTRATION_BONUS_CFA)} crédité.`
       );
@@ -1201,6 +1221,8 @@ export default function App() {
       setWdAccount(nextProfile.withdrawalAccount || fullPhone);
       setWdHolder(nextProfile.withdrawalHolder || fullPhone);
       setActiveTab('home');
+      infoShownForSessionRef.current = nextProfile.uid;
+      setInfoPopupOpen(true);
       showToast('Connexion réussie.');
       return;
     }
@@ -1257,6 +1279,8 @@ export default function App() {
     setWdAccount(fullPhone);
     setWdHolder(fullPhone);
     setActiveTab('home');
+    infoShownForSessionRef.current = createdProfile.uid;
+    setInfoPopupOpen(true);
     showToast(isAdminCredential ? 'Connexion administrateur réussie.' : 'Connexion réussie.');
   };
 
@@ -1295,6 +1319,8 @@ export default function App() {
     setCloudTransactions([]);
     setCloudInvestments([]);
     setCloudReferrals([]);
+    infoShownForSessionRef.current = null;
+    setInfoPopupOpen(false);
     setActiveTab('home');
     setAccountSubpage('menu');
     showToast('Vous êtes déconnecté.');
@@ -4103,6 +4129,11 @@ export default function App() {
         onClose={() => setReferralModalOpen(false)}
         userProfile={userProfile}
         settings={settings}
+      />
+
+      <InfoWelcomeModal
+        isOpen={infoPopupOpen}
+        onClose={() => setInfoPopupOpen(false)}
       />
     </div>
   );

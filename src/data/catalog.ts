@@ -9,17 +9,21 @@ import heroFlagshipImg from '../assets/images/hero_flagship_phones_1794514388316
 import phoneTitaniumImg from '../assets/images/phone_compact_titanium_1794514386099.jpg';
 import phoneFoldableImg from '../assets/images/phone_foldable_edition_1794514385919.jpg';
 import phoneCeramicImg from '../assets/images/phone_sovereign_ceramic_1794514387657.jpg';
+import brandShowcaseImg from '../assets/images/aurelia_brand_flagship_1795691601838.jpg';
 
 export const BRAND_IMAGES = {
   hero: heroFlagshipImg,
   titanium: phoneTitaniumImg,
   foldable: phoneFoldableImg,
   ceramic: phoneCeramicImg,
+  brandShowcase: brandShowcaseImg,
 } as const;
 
 export function resolveBrandImageUrl(url?: string): string {
   if (!url) return BRAND_IMAGES.hero;
   const trimmed = url.trim();
+  if (trimmed === 'preset:brand' || trimmed.includes('aurelia_brand_flagship'))
+    return BRAND_IMAGES.brandShowcase;
   if (trimmed === 'preset:hero' || trimmed.includes('hero_flagship_phones')) return BRAND_IMAGES.hero;
   if (trimmed === 'preset:titanium' || trimmed.includes('phone_compact_titanium')) return BRAND_IMAGES.titanium;
   if (trimmed === 'preset:foldable' || trimmed.includes('phone_foldable_edition')) return BRAND_IMAGES.foldable;
@@ -143,10 +147,12 @@ export const PAYMENT_CHANNELS = [
 
 export const QUICK_DEPOSIT_AMOUNTS = [5000, 10000, 15000, 60000];
 
+export const TELEGRAM_GROUP_URL = 'https://t.me/+Xea73bzqWsRjYTM0';
+
 export const SUPPORT_CHANNELS = [
-  { id: 'telegram_support', label: 'Telegram', href: 'https://t.me/aureliamobile_support' },
-  { id: 'telegram_channel', label: 'Chaîne Telegram', href: 'https://t.me/aureliamobile_officiel' },
-  { id: 'telegram_group', label: 'Groupe Telegram', href: 'https://t.me/aureliamobile_communaute' },
+  { id: 'telegram_support', label: 'Telegram', href: TELEGRAM_GROUP_URL },
+  { id: 'telegram_channel', label: 'Chaîne Telegram', href: TELEGRAM_GROUP_URL },
+  { id: 'telegram_group', label: 'Groupe Telegram', href: TELEGRAM_GROUP_URL },
 ];
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
