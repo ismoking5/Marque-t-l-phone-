@@ -3,6 +3,7 @@ import type {
   InvestmentItem,
   PlatformSettings,
   ProjectItem,
+  ReferralMissionConfig,
 } from '../types';
 
 import heroFlagshipImg from '../assets/images/hero_flagship_phones_1794514388316.jpg';
@@ -10,6 +11,7 @@ import phoneTitaniumImg from '../assets/images/phone_compact_titanium_1794514386
 import phoneFoldableImg from '../assets/images/phone_foldable_edition_1794514385919.jpg';
 import phoneCeramicImg from '../assets/images/phone_sovereign_ceramic_1794514387657.jpg';
 import brandShowcaseImg from '../assets/images/aurelia_brand_flagship_1795691601838.jpg';
+import missionsCenterBannerImg from '../assets/images/missions_center_banner_1795707717298.jpg';
 
 export const BRAND_IMAGES = {
   hero: heroFlagshipImg,
@@ -17,11 +19,14 @@ export const BRAND_IMAGES = {
   foldable: phoneFoldableImg,
   ceramic: phoneCeramicImg,
   brandShowcase: brandShowcaseImg,
+  missionsCenter: missionsCenterBannerImg,
 } as const;
 
 export function resolveBrandImageUrl(url?: string): string {
   if (!url) return BRAND_IMAGES.hero;
   const trimmed = url.trim();
+  if (trimmed === 'preset:missions' || trimmed.includes('missions_center_banner'))
+    return BRAND_IMAGES.missionsCenter;
   if (trimmed === 'preset:brand' || trimmed.includes('aurelia_brand_flagship'))
     return BRAND_IMAGES.brandShowcase;
   if (trimmed === 'preset:hero' || trimmed.includes('hero_flagship_phones')) return BRAND_IMAGES.hero;
@@ -153,6 +158,37 @@ export const SUPPORT_CHANNELS = [
   { id: 'telegram_support', label: 'Telegram', href: TELEGRAM_GROUP_URL },
   { id: 'telegram_channel', label: 'Chaîne Telegram', href: TELEGRAM_GROUP_URL },
   { id: 'telegram_group', label: 'Groupe Telegram', href: TELEGRAM_GROUP_URL },
+];
+
+export const REFERRAL_MISSIONS: ReferralMissionConfig[] = [
+  {
+    id: 'mission_ref_3',
+    title: 'Parrainez 3 amis',
+    description: 'Invitez 3 investisseurs de niveau 1',
+    target: 3,
+    reward: 700,
+  },
+  {
+    id: 'mission_ref_10',
+    title: 'Parrainez 10 amis',
+    description: 'Invitez 10 investisseurs de niveau 1',
+    target: 10,
+    reward: 2500,
+  },
+  {
+    id: 'mission_ref_30',
+    title: 'Parrainez 30 amis',
+    description: 'Invitez 30 investisseurs de niveau 1',
+    target: 30,
+    reward: 7000,
+  },
+  {
+    id: 'mission_ref_50',
+    title: 'Parrainez 50 amis',
+    description: 'Invitez 50 investisseurs de niveau 1',
+    target: 50,
+    reward: 15000,
+  },
 ];
 
 export const DEFAULT_SETTINGS: PlatformSettings = {

@@ -57,6 +57,7 @@ import {
   GIFT_CODE_MIN_CFA,
   OFFICIAL_VIP_CATALOG,
   OFFICIAL_VIP_IDS,
+  REFERRAL_MISSIONS,
   REGISTRATION_BONUS_CFA,
   SUPPORT_CHANNELS,
   TELEGRAM_GROUP_URL,
@@ -89,9 +90,11 @@ import {
   sbAdminUpsertGiftCode,
   sbChangePassword,
   sbClaimDailyCheckin,
+  sbClaimReferralMission,
   sbCreateDeposit,
   sbEnsureProfileForAuthUser,
   sbFetchPublicData,
+  sbGetMyMissionStatus,
   sbLoadAdminData,
   sbLoadUserData,
   sbPhoneAuth,
@@ -361,7 +364,7 @@ export default function App() {
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState<
-    'home' | 'projects' | 'investments' | 'team' | 'account' | 'checkin' | 'admin'
+    'home' | 'projects' | 'investments' | 'team' | 'account' | 'checkin' | 'missions' | 'admin'
   >('home');
   const [accountSubpage, setAccountSubpage] = useState<
     'menu' | 'history' | 'withdrawal_account' | 'password' | 'about' | 'support' | 'gift_code'
@@ -394,7 +397,7 @@ export default function App() {
   const [referralModalOpen, setReferralModalOpen] = useState(false);
   const [infoPopupOpen, setInfoPopupOpen] = useState(false);
 
-  // Daily check-in & gift code
+  // Daily check-in, gift code & missions
   const [claimingCheckin, setClaimingCheckin] = useState(false);
   const [checkinNowMs, setCheckinNowMs] = useState(() => Date.now());
   const [giftCodeInput, setGiftCodeInput] = useState('');
@@ -403,6 +406,11 @@ export default function App() {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+  const [sbMissionStatus, setSbMissionStatus] = useState<{
+    level1Investors: number;
+    claimedMissions: string[];
+  }>({ level1Investors: 0, claimedMissions: [] });
+  const [claimingMissionId, setClaimingMissionId] = useState<string | null>(null);
 
   // Withdrawal account form
   const [wdCountry, setWdCountry] = useState('Burkina Faso');
@@ -425,6 +433,7 @@ export default function App() {
   const payoutSyncingRef = useRef(false);
   const checkinLockRef = useRef(false);
   const giftCodeLockRef = useRef(false);
+  const missionLockRef = useRef(false);
   const refreshSupabaseInflightRef = useRef<Promise<void> | null>(null);
   const infoShownForSessionRef = useRef<string | null>(null);
 
@@ -513,10 +522,14 @@ export default function App() {
           showToast(`+${formatCFA(credited)} de gains quotidiens crédités sur votre solde.`);
         }
 
-        const userData = await sbLoadUserData(currentProf.uid);
+        const [userData, missionStatus] = await Promise.all([
+          sbLoadUserData(currentProf.uid),
+          sbGetMyMissionStatus(),
+        ]);
         setInvestments(userData.investments);
         setTransactions(userData.transactions);
         setReferrals(userData.referrals);
+        setSbMissionStatus(missionStatus);
 
         const adminNow =
           isAdminEmail(email || sessionUser?.email || currentProf.email) ||
@@ -698,6 +711,7 @@ export default function App() {
           setCloudInvestments([]);
           setCloudReferrals([]);
           setCloudGiftCodes(loadLocalGiftCodes());
+          setSbMissionStatus({ level1Investors: 0, claimedMissions: [] });
         }
       } catch (err) {
         if (isSupabaseSchemaMissing(err)) {
@@ -2892,6 +2906,133 @@ export default function App() {
     };
   }, [referrals, allReferrals, userProfile]);
 
+  const level1InvestorsCount = useMemo(() => {
+    const localCount = teamByLevel[1].filter((r) => {
+      if (r.status === 'rewarded' || (r.commissionEarned || 0) > 0) return true;
+      const member = allUsers.find((u) => u.uid === r.referredUid);
+      return Boolean(member && (member.totalInvested || 0) > 0);
+    }).length;
+    if (isSupabaseConfigured) {
+      return Math.max(sbMissionStatus.level1Investors, localCount);
+    }
+    return localCount;
+  }, [teamByLevel, allUsers, sbMissionStatus.level1Investors]);
+
+  const claimedMissionIds = useMemo(() => {
+    const set = new Set<string>(sbMissionStatus.claimedMissions);
+    transactions.forEach((tx) => {
+      REFERRAL_MISSIONS.forEach((m) => {
+        if (tx.id.startsWith('tx_mission_') && tx.id.endsWith(m.id)) {
+          set.add(m.id);
+        }
+      });
+    });
+    return set;
+  }, [sbMissionStatus.claimedMissions, transactions]);
+
+  const handleClaimReferralMission = async (missionId: string) => {
+    if (!userProfile || missionLockRef.current || claimingMissionId) return;
+    const mission = REFERRAL_MISSIONS.find((m) => m.id === missionId);
+    if (!mission) return;
+    if (claimedMissionIds.has(mission.id)) {
+      showToast('Récompense déjà réclamée pour cette mission.');
+      return;
+    }
+    if (level1InvestorsCount < mission.target) {
+      showToast(
+        `Il vous faut ${mission.target} investisseurs de niveau 1 (${level1InvestorsCount}/${mission.target}).`
+      );
+      return;
+    }
+
+    missionLockRef.current = true;
+    setClaimingMissionId(mission.id);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const res = await sbClaimReferralMission(mission.id);
+        setSbMissionStatus((prev) => ({
+          ...prev,
+          claimedMissions: prev.claimedMissions.includes(mission.id)
+            ? prev.claimedMissions
+            : [...prev.claimedMissions, mission.id],
+        }));
+        setUserProfile((prev) =>
+          prev ? { ...prev, balance: Math.round((prev.balance || 0) + res.reward) } : prev
+        );
+        await refreshSupabaseState(userProfile, sbUser?.email, true);
+        showToast(`Mission accomplie ! +${formatCFA(res.reward)} crédités sur votre solde.`);
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      const txId = sanitizeId(`tx_mission_${userProfile.uid.slice(0, 20)}_${mission.id}`);
+
+      if (!firebaseUser && phoneSessionKey) {
+        const accounts = loadAccounts();
+        const rec = accounts[phoneSessionKey];
+        if (!rec) throw new Error('Session introuvable.');
+        if ((rec.transactions || []).some((t) => t.id === txId)) {
+          throw new Error('Récompense déjà réclamée pour cette mission.');
+        }
+
+        const missionTx: TransactionItem = {
+          id: txId,
+          userId: userProfile.uid,
+          userName: userProfile.displayName,
+          type: 'referral',
+          amount: mission.reward,
+          method: 'Centre des missions',
+          phoneOrAccount: userProfile.phone || userProfile.referralCode,
+          reference: clampStr(`${mission.title} (${mission.target} investisseurs niv.1)`, 2, 100),
+          status: 'completed',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        mutateLocalAccount((cur) => ({
+          ...cur,
+          profile: {
+            ...cur.profile,
+            balance: Math.round((cur.profile.balance || 0) + mission.reward),
+            updatedAt: nowIso,
+          },
+          transactions: [missionTx, ...(cur.transactions || [])],
+        }));
+        showToast(`Mission accomplie ! +${formatCFA(mission.reward)} crédités sur votre solde.`);
+        return;
+      }
+
+      if (firebaseUser) {
+        const existingTx = await getDoc(doc(db, 'transactions', txId));
+        if (existingTx.exists()) {
+          throw new Error('Récompense déjà réclamée pour cette mission.');
+        }
+        await setDoc(doc(db, 'transactions', txId), {
+          id: txId,
+          userId: sanitizeId(firebaseUser.uid),
+          userName: clampStr(userProfile.displayName, 1, 100),
+          type: 'referral',
+          amount: mission.reward,
+          method: 'Centre des missions',
+          phoneOrAccount: userProfile.phone || userProfile.referralCode,
+          reference: clampStr(`${mission.title} (${mission.target} investisseurs niv.1)`, 2, 100),
+          status: 'completed',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        await updateDoc(doc(db, 'users', firebaseUser.uid), {
+          balance: Math.round((userProfile.balance || 0) + mission.reward),
+          updatedAt: serverTimestamp(),
+        });
+        showToast(`Mission accomplie ! +${formatCFA(mission.reward)} crédités sur votre solde.`);
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erreur lors de la réclamation.');
+    } finally {
+      missionLockRef.current = false;
+      setClaimingMissionId(null);
+    }
+  };
+
   if (!authReady) {
     return (
       <div className="min-h-screen bg-[#F3F4F6] flex flex-col items-center justify-center p-6 text-center gap-4">
@@ -3130,6 +3271,163 @@ export default function App() {
                 </div>
               </div>
             </section>
+
+            {/* Bouton Centre des missions avec image professionnelle */}
+            <section aria-label="Centre des missions">
+              <button
+                type="button"
+                onClick={() => setActiveTab('missions')}
+                className="w-full rounded-2xl bg-white border border-[#EAECEF] p-3.5 sm:p-4 shadow-2xs hover:border-[#F5B800] transition-colors flex items-center gap-3.5 sm:gap-5 text-left cursor-pointer group"
+              >
+                <div className="w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden bg-[#111827] border border-[#EAECEF] shrink-0">
+                  <SafeImage
+                    src={BRAND_IMAGES.missionsCenter}
+                    alt="Centre des missions AURELIA MOBILE"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                </div>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#D97706]">
+                    Récompenses jusqu&apos;à 15 000 F CFA
+                  </p>
+                  <h2 className="text-base sm:text-lg font-medium text-[#111827] leading-snug">
+                    Centre des missions
+                  </h2>
+                  <p className="text-xs text-[#6B7280] line-clamp-1">
+                    Parrainez des investisseurs niveau 1 et réclamez vos bonus.
+                  </p>
+                </div>
+                <span className="min-h-[40px] px-4 aurelia-gold-btn text-xs sm:text-sm font-medium flex items-center justify-center shrink-0">
+                  ALLER &gt;
+                </span>
+              </button>
+            </section>
+          </main>
+        )}
+
+        {/* TAB 1C: CENTRE DES MISSIONS */}
+        {activeTab === 'missions' && (
+          <main className="space-y-4">
+            <div className="rounded-xl bg-white border border-[#EAECEF] px-3 py-2.5 flex items-center justify-between shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setActiveTab('home')}
+                className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-[#111827] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                aria-label="Retour à l'accueil"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <h1 className="text-base sm:text-lg font-medium text-[#111827]">
+                Centre des missions
+              </h1>
+              <div className="w-11" />
+            </div>
+
+            <section className="relative rounded-2xl overflow-hidden border border-[#F5B800]/35 bg-gradient-to-br from-[#FFFBEB] via-[#FEF3C7]/75 to-[#FDE68A]/55 p-5 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-2 max-w-md">
+                <p className="text-[11px] font-bold tracking-[0.2em] uppercase text-[#B45309]">
+                  MISSIONS
+                </p>
+                <h2 className="text-2xl sm:text-3xl font-display font-medium text-[#111827] leading-tight">
+                  Boostez vos gains de parrainage
+                </h2>
+                <p className="text-xs sm:text-sm text-[#4B5563] leading-relaxed">
+                  Accomplissez des missions et réclamez vos récompenses en un clic.
+                </p>
+              </div>
+              <div className="w-full sm:w-44 h-28 rounded-xl overflow-hidden border border-[#F5B800]/40 bg-[#111827] shrink-0 shadow-xs">
+                <SafeImage
+                  src={BRAND_IMAGES.missionsCenter}
+                  alt="Centre des missions AURELIA MOBILE"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              {REFERRAL_MISSIONS.map((mission) => {
+                const progress = Math.min(mission.target, level1InvestorsCount);
+                const pct = Math.min(100, Math.round((progress / mission.target) * 100));
+                const isClaimed = claimedMissionIds.has(mission.id);
+                const isReady = progress >= mission.target && !isClaimed;
+                const isBusy = claimingMissionId === mission.id;
+
+                return (
+                  <article
+                    key={mission.id}
+                    className="rounded-2xl bg-white border border-[#EAECEF] p-4 sm:p-5 shadow-2xs space-y-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="w-11 h-11 rounded-full bg-[#FFFBEB] border border-[#FDE68A] text-[#D97706] flex items-center justify-center shrink-0">
+                          <Gift className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-base font-medium text-[#111827] leading-snug">
+                            {mission.title}
+                          </h3>
+                          <p className="text-xs sm:text-sm text-[#6B7280] mt-0.5 leading-snug">
+                            {mission.description}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="font-mono-num font-semibold text-sm sm:text-base text-[#B45309] whitespace-nowrap shrink-0">
+                        + {formatCFA(mission.reward)}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <div className="h-2 w-full rounded-full bg-[#F3F4F6] overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-[#F5B800] transition-all duration-300"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs sm:text-sm font-mono-num text-[#4B5563]">
+                          {progress} / {mission.target}
+                        </span>
+
+                        {isClaimed ? (
+                          <span className="px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
+                            Réclamé ✓
+                          </span>
+                        ) : isReady ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleClaimReferralMission(mission.id)}
+                            disabled={isBusy}
+                            className="min-h-[36px] px-5 rounded-full aurelia-gold-btn text-xs font-medium cursor-pointer disabled:opacity-55"
+                          >
+                            {isBusy ? 'Validation...' : 'Réclamer'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setReferralModalOpen(true)}
+                            className="min-h-[34px] px-4 rounded-full bg-[#FEF3C7]/70 hover:bg-[#FEF3C7] text-[#92400E] text-xs font-medium transition-colors cursor-pointer"
+                          >
+                            En cours
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
+
+            <div className="pt-2 pb-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setActiveTab('home')}
+                className="min-h-[42px] px-5 text-sm font-medium text-[#D97706] hover:text-[#B45309] flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Retour à l&apos;accueil</span>
+              </button>
+            </div>
           </main>
         )}
 
@@ -4710,7 +5008,7 @@ export default function App() {
             const Icon = item.icon;
             const active =
               activeTab === item.id ||
-              (item.id === 'home' && activeTab === 'checkin') ||
+              (item.id === 'home' && (activeTab === 'checkin' || activeTab === 'missions')) ||
               (item.id === 'projects' && activeTab === 'investments') ||
               (item.id === 'account' && activeTab === 'admin');
             return (

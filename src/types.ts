@@ -139,6 +139,14 @@ export interface GiftCodeItem {
   createdAt?: unknown;
 }
 
+export interface ReferralMissionConfig {
+  id: string;
+  title: string;
+  description: string;
+  target: number;
+  reward: number;
+}
+
 export interface PhoneAuthPayload {
   mode: 'login' | 'register';
   country: string;

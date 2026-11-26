@@ -893,3 +893,43 @@ export async function sbAdminUpsertGiftCode(item: GiftCodeItem): Promise<void> {
     throw new Error(error.message);
   }
 }
+
+export async function sbGetMyMissionStatus(): Promise<{
+  level1Investors: number;
+  claimedMissions: string[];
+}> {
+  if (!supabase) return { level1Investors: 0, claimedMissions: [] };
+  const { data, error } = await supabase.rpc('get_my_mission_status');
+  if (error || !data) {
+    return { level1Investors: 0, claimedMissions: [] };
+  }
+  const obj = data as Record<string, unknown>;
+  const claimedRaw = obj.claimed_missions;
+  return {
+    level1Investors: Number(obj.level1_investors || 0),
+    claimedMissions: Array.isArray(claimedRaw) ? claimedRaw.map((x) => String(x)) : [],
+  };
+}
+
+export async function sbClaimReferralMission(missionId: string): Promise<{
+  missionId: string;
+  reward: number;
+}> {
+  if (!supabase) throw new Error('Supabase non configuré.');
+  const { data, error } = await supabase.rpc('claim_referral_mission', {
+    p_mission_id: missionId,
+  });
+  if (error) {
+    if (error.code === 'PGRST202' || String(error.message).includes('claim_referral_mission')) {
+      throw new Error(
+        'Fonction SQL missions non encore installée. Exécutez la migration 20261126020000_referral_missions.sql dans Supabase.'
+      );
+    }
+    throw new Error(error.message);
+  }
+  const obj = (data || {}) as Record<string, unknown>;
+  return {
+    missionId: String(obj.mission_id || missionId),
+    reward: Number(obj.reward || 0),
+  };
+}
