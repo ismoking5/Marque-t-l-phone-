@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
 import {
   COUNTRY_OPTIONS,
+  REGISTRATION_BONUS_CFA,
+  formatCFA,
   isEligibleCountry,
   validateEligiblePhone,
 } from '../data/catalog';
@@ -250,6 +252,11 @@ export function AuthScreen({
                   placeholder="Code d'invitation (optionnel, ex: AM-409899)"
                   className="w-full h-11 px-3.5 rounded-lg border border-[#D8DDE6] bg-white text-xs sm:text-sm font-mono-num text-[#0F172A] placeholder:text-[#64748B] focus:outline-none focus:border-[#0F172A] focus:ring-1 focus:ring-[#0F172A]/20"
                 />
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#0F766E]/10 border border-[#0F766E]/25 text-[#0F766E] text-[11px] font-semibold text-center">
+                Bonus de bienvenue :{' '}
+                <strong className="font-mono-num">{formatCFA(REGISTRATION_BONUS_CFA)}</strong>{' '}
+                offerts sur chaque nouvelle inscription.
               </div>
             </>
           )}

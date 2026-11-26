@@ -49,6 +49,7 @@ import {
   DEFAULT_SETTINGS,
   OFFICIAL_VIP_CATALOG,
   OFFICIAL_VIP_IDS,
+  REGISTRATION_BONUS_CFA,
   SUPPORT_CHANNELS,
   clampStr,
   computeInvestmentMetrics,
@@ -1029,10 +1030,12 @@ export default function App() {
       setWdAccount(profile.withdrawalAccount || profile.phone || '');
       setWdHolder(profile.withdrawalHolder || profile.displayName || '');
       setActiveTab('home');
-      await refreshSupabaseState(profile, sessionData.session?.user?.email);
+      await refreshSupabaseState(profile, sessionData.session?.user?.email, true);
       showToast(
         payload.mode === 'register'
-          ? 'Inscription réussie ! Bienvenue sur AURELIA MOBILE.'
+          ? profile.balance >= REGISTRATION_BONUS_CFA
+            ? `Inscription réussie ! Bonus de bienvenue de ${formatCFA(REGISTRATION_BONUS_CFA)} crédité.`
+            : 'Inscription réussie ! Bienvenue sur AURELIA MOBILE.'
           : isUniqueAdminPhone(profile.phone)
           ? 'Connexion administrateur réussie.'
           : 'Connexion réussie.'
@@ -1061,11 +1064,12 @@ export default function App() {
           "Ce numéro est réservé à l'administrateur unique. Veuillez vous connecter dans l'onglet Connexion."
         );
       }
-      if (accounts[key]) {
+      const uid = sanitizeId(`usr_${dialCode.replace(/\D/g, '')}_${cleanPhone.replace(/\D/g, '')}`);
+      const existingByUid = Object.values(accounts).some((a) => a.profile.uid === uid);
+      if (accounts[key] || existingByUid) {
         throw new Error('Ce numéro de téléphone est déjà inscrit. Veuillez vous connecter.');
       }
       const nowIso = new Date().toISOString();
-      const uid = sanitizeId(`usr_${dialCode.replace(/\D/g, '')}_${cleanPhone.replace(/\D/g, '')}`);
       const referralCode = sanitizeId(
         `AM-${cleanPhone.replace(/\D/g, '').slice(-6).padStart(6, '0')}`
       );
@@ -1073,6 +1077,21 @@ export default function App() {
       const referredBy = rawInvite
         ? sanitizeId(rawInvite.toUpperCase())
         : localStorage.getItem(REF_UID_KEY) || '';
+
+      const bonusTxId = sanitizeId(`tx_reg_bonus_${uid}`);
+      const bonusTx: TransactionItem = {
+        id: bonusTxId,
+        userId: uid,
+        userName: fullPhone,
+        type: 'credit',
+        amount: REGISTRATION_BONUS_CFA,
+        method: "Bonus d'inscription",
+        phoneOrAccount: fullPhone,
+        reference: 'Bonus de bienvenue (nouvelle inscription)',
+        status: 'completed',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
 
       const newProfile: UserProfile = {
         uid,
@@ -1083,7 +1102,7 @@ export default function App() {
         withdrawalMethod: defaultMethod,
         withdrawalAccount: fullPhone,
         withdrawalHolder: fullPhone,
-        balance: 0,
+        balance: REGISTRATION_BONUS_CFA,
         totalInvested: 0,
         totalEarned: 0,
         referralCode,
@@ -1133,7 +1152,7 @@ export default function App() {
         password: payload.password,
         profile: newProfile,
         investments: [],
-        transactions: [],
+        transactions: [bonusTx],
         referrals: [],
       };
       saveAccounts(accounts);
@@ -1142,14 +1161,16 @@ export default function App() {
       setPhoneSessionKey(key);
       setUserProfile(newProfile);
       setInvestments([]);
-      setTransactions([]);
+      setTransactions([bonusTx]);
       setReferrals([]);
       setWdCountry(payload.country);
       setWdMethod(defaultMethod);
       setWdAccount(fullPhone);
       setWdHolder(fullPhone);
       setActiveTab('home');
-      showToast('Inscription réussie ! Bienvenue sur AURELIA MOBILE.');
+      showToast(
+        `Inscription réussie ! Bonus de bienvenue de ${formatCFA(REGISTRATION_BONUS_CFA)} crédité.`
+      );
       return;
     }
 

@@ -35,10 +35,14 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   referred_by text NOT NULL DEFAULT '',
   referral_bonus bigint NOT NULL DEFAULT 0 CHECK (referral_bonus >= 0),
   referral_count integer NOT NULL DEFAULT 0 CHECK (referral_count >= 0),
+  registration_bonus_claimed boolean NOT NULL DEFAULT false,
   role text NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS registration_bonus_claimed boolean NOT NULL DEFAULT false;
 
 -- Protection des champs financiers et du rôle contre toute modification directe côté client
 CREATE OR REPLACE FUNCTION public.protect_profile_sensitive_fields()
@@ -60,6 +64,7 @@ BEGIN
      OR NEW.total_earned IS DISTINCT FROM OLD.total_earned
      OR NEW.referral_bonus IS DISTINCT FROM OLD.referral_bonus
      OR NEW.referral_count IS DISTINCT FROM OLD.referral_count
+     OR NEW.registration_bonus_claimed IS DISTINCT FROM OLD.registration_bonus_claimed
      OR NEW.referral_code IS DISTINCT FROM OLD.referral_code
      OR NEW.referred_by IS DISTINCT FROM OLD.referred_by THEN
     RAISE EXCEPTION 'Modification directe des champs protégés interdite.';
@@ -93,8 +98,79 @@ CREATE POLICY "profiles_insert_own"
     AND total_invested = 0
     AND total_earned = 0
     AND referral_bonus = 0
+    AND COALESCE(registration_bonus_claimed, false) = false
     AND (role = 'user' OR public.is_admin())
   );
+
+-- Attribution atomique du bonus d'inscription (500 F CFA uniquement sur nouvelle inscription, zéro double crédit)
+CREATE OR REPLACE FUNCTION public.apply_registration_bonus()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_signup_mode text := '';
+  v_tx_id text;
+  v_inserted_id text;
+BEGIN
+  IF NEW.role <> 'user' OR lower(COALESCE(NEW.email, '')) IN (
+    '22677409899@aureliamobile.africa',
+    'ismailasawadogo10@gmail.com'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF COALESCE(NEW.registration_bonus_claimed, false) THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(u.raw_user_meta_data ->> 'signup_mode', '')
+  INTO v_signup_mode
+  FROM auth.users u
+  WHERE u.id = NEW.auth_uid;
+
+  IF v_signup_mode <> 'register' THEN
+    RETURN NEW;
+  END IF;
+
+  v_tx_id := 'tx_reg_bonus_' || NEW.uid;
+
+  INSERT INTO public.transactions (
+    id, user_id, user_name, type, amount, method, phone_or_account, reference, status
+  ) VALUES (
+    v_tx_id,
+    NEW.uid,
+    NEW.display_name,
+    'credit',
+    500,
+    'Bonus d''inscription',
+    COALESCE(NULLIF(NEW.phone, ''), NEW.email),
+    'Bonus de bienvenue (nouvelle inscription)',
+    'completed'
+  )
+  ON CONFLICT (id) DO NOTHING
+  RETURNING id INTO v_inserted_id;
+
+  IF v_inserted_id IS NOT NULL THEN
+    PERFORM set_config('app.allow_financial_write', '1', true);
+    UPDATE public.profiles
+    SET balance = balance + 500,
+        registration_bonus_claimed = true,
+        updated_at = now()
+    WHERE uid = NEW.uid
+      AND registration_bonus_claimed = false;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_apply_registration_bonus ON public.profiles;
+CREATE TRIGGER trg_apply_registration_bonus
+  AFTER INSERT ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.apply_registration_bonus();
 
 DROP POLICY IF EXISTS "profiles_update_own_or_admin" ON public.profiles;
 CREATE POLICY "profiles_update_own_or_admin"

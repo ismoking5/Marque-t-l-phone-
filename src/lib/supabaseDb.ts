@@ -372,14 +372,16 @@ export async function sbEnsureProfileForAuthUser(
       await supabase.rpc('register_referral_tree', {
         p_invite_code: effectiveReferredBy,
       });
-      const refreshed = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('auth_uid', authUid)
-        .maybeSingle();
-      if (refreshed.data) {
-        return mapProfileRow(refreshed.data as Record<string, unknown>);
-      }
+    }
+
+    // Re-fetch the inserted row so AFTER INSERT triggers (e.g., 500 F CFA welcome bonus) are reflected immediately
+    const refreshed = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('auth_uid', authUid)
+      .maybeSingle();
+    if (refreshed.data) {
+      return mapProfileRow(refreshed.data as Record<string, unknown>);
     }
 
     return mapProfileRow(profileRow);
@@ -432,6 +434,7 @@ export async function sbPhoneAuth(payload: PhoneAuthPayload): Promise<UserProfil
           country: payload.country,
           referral_code: referralCode,
           referred_by: referredBy,
+          signup_mode: 'register',
         },
       },
     });
