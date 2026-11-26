@@ -21,6 +21,9 @@ export interface UserProfile {
   referralBonus?: number;
   referralCount?: number;
   role: 'user' | 'admin';
+  lastCheckinAt?: string | null;
+  checkinDays?: number;
+  checkinTotal?: number;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -124,6 +127,16 @@ export interface PhoneAccountRecord {
   investments: InvestmentItem[];
   transactions: TransactionItem[];
   referrals: ReferralItem[];
+}
+
+export interface GiftCodeItem {
+  code: string;
+  minAmount: number;
+  maxAmount: number;
+  maxUses: number;
+  usesCount: number;
+  isActive: boolean;
+  createdAt?: unknown;
 }
 
 export interface PhoneAuthPayload {

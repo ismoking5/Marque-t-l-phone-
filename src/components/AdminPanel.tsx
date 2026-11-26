@@ -29,6 +29,8 @@ import {
 import {
   BRAND_IMAGES,
   DEFAULT_ADMIN_PHONE,
+  GIFT_CODE_MAX_CFA,
+  GIFT_CODE_MIN_CFA,
   OFFICIAL_VIP_CATALOG,
   computeInvestmentMetrics,
   formatCFA,
@@ -36,6 +38,7 @@ import {
   getProjectDailyIncome,
 } from '../data/catalog';
 import type {
+  GiftCodeItem,
   InvestmentItem,
   PlatformSettings,
   ProjectItem,
@@ -71,12 +74,14 @@ export function AdminPanel({
   transactions,
   investments,
   referrals,
+  giftCodes = [],
   settings,
   onSaveProject,
   onResetOfficialVipCatalog,
   onProcessTransaction,
   onAdjustUserBalance,
   onGiftProduct,
+  onSaveGiftCode,
   onSaveSettings,
   isCloudConnected = false,
   onConnectGoogleCloud,
@@ -87,6 +92,7 @@ export function AdminPanel({
   transactions: TransactionItem[];
   investments: InvestmentItem[];
   referrals: ReferralItem[];
+  giftCodes?: GiftCodeItem[];
   settings: PlatformSettings;
   onSaveProject: (project: ProjectItem, isNew: boolean) => Promise<void>;
   onResetOfficialVipCatalog: () => Promise<void>;
@@ -98,13 +104,14 @@ export function AdminPanel({
     quantity: number,
     reason: string
   ) => Promise<void>;
+  onSaveGiftCode?: (item: GiftCodeItem) => Promise<void>;
   onSaveSettings: (settings: PlatformSettings) => Promise<void>;
   isCloudConnected?: boolean;
   onConnectGoogleCloud?: () => Promise<void>;
   onRefreshAdmin?: () => Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<
-    'projects' | 'transactions' | 'investments' | 'referrals' | 'users' | 'settings'
+    'projects' | 'transactions' | 'investments' | 'referrals' | 'users' | 'gift_codes' | 'settings'
   >('projects');
   const [txFilter, setTxFilter] = useState<'all' | 'pending' | 'deposit' | 'withdrawal'>('all');
   const [userSearch, setUserSearch] = useState('');
@@ -112,6 +119,8 @@ export function AdminPanel({
   const [isNewProject, setIsNewProject] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [newGiftCode, setNewGiftCode] = useState('');
+  const [newGiftMaxUses, setNewGiftMaxUses] = useState('1000');
 
   // Credit / subtract balance modal state
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
@@ -391,6 +400,53 @@ export function AdminPanel({
     }
   };
 
+  const handleCreateGiftCode = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!onSaveGiftCode) return;
+    const cleanedCode = newGiftCode.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    if (cleanedCode.length < 3) {
+      notify('Veuillez saisir un code cadeau d’au moins 3 caractères (lettres ou chiffres).');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSaveGiftCode({
+        code: cleanedCode,
+        minAmount: GIFT_CODE_MIN_CFA,
+        maxAmount: GIFT_CODE_MAX_CFA,
+        maxUses: Math.max(1, Math.round(Number(newGiftMaxUses) || 1000)),
+        usesCount: 0,
+        isActive: true,
+      });
+      setNewGiftCode('');
+      notify(`Code cadeau ${cleanedCode} créé (gain aléatoire ${GIFT_CODE_MIN_CFA} à ${GIFT_CODE_MAX_CFA} F CFA).`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Erreur lors de la création du code cadeau.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleGiftCode = async (item: GiftCodeItem) => {
+    if (!onSaveGiftCode) return;
+    setSaving(true);
+    try {
+      await onSaveGiftCode({
+        ...item,
+        isActive: !item.isActive,
+      });
+      notify(
+        item.isActive
+          ? `Code cadeau ${item.code} désactivé.`
+          : `Code cadeau ${item.code} réactivé.`
+      );
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Impossible de modifier ce code cadeau.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const selectedGiftProject = fullCatalog.find((p) => p.id === giftProjectId) || fullCatalog[0];
   const selectedGiftUser = users.find((u) => u.uid === giftTargetUid) || null;
   const giftUnitDaily = selectedGiftProject ? getProjectDailyIncome(selectedGiftProject) : 0;
@@ -470,6 +526,7 @@ export function AdminPanel({
           },
           { id: 'referrals' as const, label: `Équipes (${referrals.length})`, icon: Users },
           { id: 'users' as const, label: `Utilisateurs (${users.length})`, icon: Users },
+          { id: 'gift_codes' as const, label: `Codes cadeaux (${giftCodes.length})`, icon: Gift },
           { id: 'settings' as const, label: 'Paramètres', icon: Settings },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -1302,6 +1359,144 @@ export function AdminPanel({
             {saving ? 'Enregistrement...' : 'Enregistrer les paramètres'}
           </button>
         </form>
+      )}
+
+      {activeTab === 'gift_codes' && (
+        <div className="space-y-4">
+          <form
+            onSubmit={handleCreateGiftCode}
+            className="p-5 rounded-3xl bg-white border border-[#E2E5EC] space-y-4 shadow-2xs"
+          >
+            <div>
+              <h3 className="text-base font-extrabold text-[#0F172A] flex items-center gap-2">
+                <Gift className="w-5 h-5 text-[#9A6B00]" />
+                Créer un code cadeau Telegram ({GIFT_CODE_MIN_CFA} à {GIFT_CODE_MAX_CFA} F CFA aléatoires)
+              </h3>
+              <p className="text-xs text-[#475569] mt-0.5">
+                Chaque membre qui saisit ce code dans son onglet Moi reçoit un montant aléatoire
+                entre {GIFT_CODE_MIN_CFA} F CFA et {GIFT_CODE_MAX_CFA} F CFA (1 seule fois par compte,
+                sans double crédit).
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label className="block text-xs font-semibold text-[#334155] mb-1">
+                  Code cadeau (majuscules/chiffres)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newGiftCode}
+                    onChange={(e) => setNewGiftCode(e.target.value.toUpperCase())}
+                    placeholder="Ex : AURELIA77"
+                    maxLength={32}
+                    className="flex-1 h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs font-mono-num font-bold uppercase"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewGiftCode(
+                        `AM${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+                      )
+                    }
+                    className="h-11 px-3 rounded-xl bg-[#F3F4F6] hover:bg-[#E2E5EC] text-[#0F172A] text-xs font-bold cursor-pointer shrink-0"
+                  >
+                    Générer
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#334155] mb-1">
+                  Nombre maximal d&apos;utilisations
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100000}
+                  value={newGiftMaxUses}
+                  onChange={(e) => setNewGiftMaxUses(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs font-mono-num font-bold"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={saving || !onSaveGiftCode}
+                className="h-11 px-5 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                {saving ? 'Création...' : 'Créer le code'}
+              </button>
+            </div>
+          </form>
+
+          <div className="p-5 rounded-3xl bg-white border border-[#E2E5EC] space-y-3 shadow-2xs">
+            <h4 className="text-sm font-extrabold text-[#0F172A]">
+              Codes cadeaux enregistrés ({giftCodes.length})
+            </h4>
+            {giftCodes.length === 0 ? (
+              <p className="text-xs text-[#64748B]">
+                Aucun code cadeau trouvé. Créez un code ci-dessus pour le partager sur Telegram.
+              </p>
+            ) : (
+              <div className="divide-y divide-[#F1F5F9]">
+                {giftCodes.map((item) => (
+                  <div
+                    key={item.code}
+                    className="py-3 flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-mono-num font-extrabold text-[#0F172A]">
+                          {item.code}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            item.isActive
+                              ? 'bg-emerald-100 text-[#0F766E]'
+                              : 'bg-slate-200 text-[#475569]'
+                          }`}
+                        >
+                          {item.isActive ? 'Actif' : 'Désactivé'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#475569] mt-0.5">
+                        Gain aléatoire : {item.minAmount} à {item.maxAmount} F CFA · Utilisations :{' '}
+                        <span className="font-mono-num font-bold text-[#0F172A]">
+                          {item.usesCount} / {item.maxUses}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(item.code);
+                          notify(`Code ${item.code} copié !`);
+                        }}
+                        className="min-h-[38px] px-3 rounded-lg bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] text-xs font-bold cursor-pointer"
+                      >
+                        Copier
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleGiftCode(item)}
+                        disabled={saving}
+                        className="min-h-[38px] px-3 rounded-lg bg-[#F3F4F6] hover:bg-[#E2E5EC] text-[#0F172A] text-xs font-bold cursor-pointer"
+                      >
+                        {item.isActive ? 'Désactiver' : 'Activer'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* MODAL: FULL USER ACCOUNT DETAILS */}

@@ -12,6 +12,7 @@ import {
   CircleDollarSign,
   CreditCard,
   FileText,
+  Gift,
   Headphones,
   History,
   Home,
@@ -46,13 +47,19 @@ import {
   ADMIN_EMAIL,
   BRAND_IMAGES,
   COUNTRY_OPTIONS,
+  DAILY_CHECKIN_BONUS_CFA,
+  DAILY_CHECKIN_COOLDOWN_MS,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PHONE,
+  DEFAULT_GIFT_CODES,
   DEFAULT_SETTINGS,
+  GIFT_CODE_MAX_CFA,
+  GIFT_CODE_MIN_CFA,
   OFFICIAL_VIP_CATALOG,
   OFFICIAL_VIP_IDS,
   REGISTRATION_BONUS_CFA,
   SUPPORT_CHANNELS,
+  TELEGRAM_GROUP_URL,
   clampStr,
   computeInvestmentMetrics,
   formatCFA,
@@ -79,7 +86,9 @@ import {
   sbAdminSaveProject,
   sbAdminSaveSettings,
   sbAdminSyncOfficialCatalog,
+  sbAdminUpsertGiftCode,
   sbChangePassword,
+  sbClaimDailyCheckin,
   sbCreateDeposit,
   sbEnsureProfileForAuthUser,
   sbFetchPublicData,
@@ -87,12 +96,14 @@ import {
   sbLoadUserData,
   sbPhoneAuth,
   sbPurchaseVip,
+  sbRedeemGiftCode,
   sbRequestWithdrawal,
   sbSaveWithdrawalAccount,
   sbSyncDailyPayouts,
 } from './lib/supabaseDb';
 import { isSupabaseConfigured, supabase } from './supabase';
 import type {
+  GiftCodeItem,
   InvestmentItem,
   PhoneAccountRecord,
   PhoneAuthPayload,
@@ -122,6 +133,8 @@ const PROJECTS_KEY = 'aurelia_mobile_projects_v1';
 const SETTINGS_KEY = 'aurelia_mobile_settings_v1';
 const REF_UID_KEY = 'aurelia_mobile_ref_uid';
 const STRICT_ADMIN_MIGRATED_KEY = 'aurelia_mobile_strict_admin_v1';
+const GIFT_CODES_KEY = 'aurelia_mobile_gift_codes_v1';
+const GIFT_REDEMPTIONS_KEY = 'aurelia_mobile_gift_redemptions_v1';
 
 function isUniqueAdminPhone(phone?: string): boolean {
   if (!phone) return false;
@@ -253,6 +266,50 @@ function saveLocalSettings(settings: PlatformSettings, markLocalOverride = false
   }
 }
 
+function loadLocalGiftCodes(): GiftCodeItem[] {
+  try {
+    const raw = localStorage.getItem(GIFT_CODES_KEY);
+    if (!raw) return DEFAULT_GIFT_CODES;
+    const parsed = JSON.parse(raw) as GiftCodeItem[];
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_GIFT_CODES;
+  } catch {
+    return DEFAULT_GIFT_CODES;
+  }
+}
+
+function saveLocalGiftCodes(codes: GiftCodeItem[]) {
+  try {
+    localStorage.setItem(GIFT_CODES_KEY, JSON.stringify(codes));
+  } catch {
+    // ignore
+  }
+}
+
+function loadLocalGiftRedemptions(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem(GIFT_REDEMPTIONS_KEY);
+    if (!raw) return {};
+    return (JSON.parse(raw) as Record<string, string[]>) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalGiftRedemptions(map: Record<string, string[]>) {
+  try {
+    localStorage.setItem(GIFT_REDEMPTIONS_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+function formatCountdownHhMm(ms: number): string {
+  const totalMins = Math.max(1, Math.ceil(ms / 60000));
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return `${hrs}h ${String(mins).padStart(2, '0')}m`;
+}
+
 function transactionTypeLabel(type: TransactionType): string {
   switch (type) {
     case 'deposit':
@@ -304,10 +361,10 @@ export default function App() {
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState<
-    'home' | 'projects' | 'investments' | 'team' | 'account' | 'admin'
+    'home' | 'projects' | 'investments' | 'team' | 'account' | 'checkin' | 'admin'
   >('home');
   const [accountSubpage, setAccountSubpage] = useState<
-    'menu' | 'history' | 'withdrawal_account' | 'password' | 'about' | 'support'
+    'menu' | 'history' | 'withdrawal_account' | 'password' | 'about' | 'support' | 'gift_code'
   >('menu');
 
   const [projects, setProjects] = useState<ProjectItem[]>(() => loadLocalProjects());
@@ -321,6 +378,7 @@ export default function App() {
   const [cloudTransactions, setCloudTransactions] = useState<TransactionItem[]>([]);
   const [cloudInvestments, setCloudInvestments] = useState<InvestmentItem[]>([]);
   const [cloudReferrals, setCloudReferrals] = useState<ReferralItem[]>([]);
+  const [cloudGiftCodes, setCloudGiftCodes] = useState<GiftCodeItem[]>(() => loadLocalGiftCodes());
   const [localSyncTick, setLocalSyncTick] = useState(0);
 
   const [historyFilter, setHistoryFilter] = useState<string>('all');
@@ -335,6 +393,16 @@ export default function App() {
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [referralModalOpen, setReferralModalOpen] = useState(false);
   const [infoPopupOpen, setInfoPopupOpen] = useState(false);
+
+  // Daily check-in & gift code
+  const [claimingCheckin, setClaimingCheckin] = useState(false);
+  const [checkinNowMs, setCheckinNowMs] = useState(() => Date.now());
+  const [giftCodeInput, setGiftCodeInput] = useState('');
+  const [redeemingGiftCode, setRedeemingGiftCode] = useState(false);
+  const [giftCodeFeedback, setGiftCodeFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   // Withdrawal account form
   const [wdCountry, setWdCountry] = useState('Burkina Faso');
@@ -355,6 +423,8 @@ export default function App() {
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const payoutSyncingRef = useRef(false);
+  const checkinLockRef = useRef(false);
+  const giftCodeLockRef = useRef(false);
   const refreshSupabaseInflightRef = useRef<Promise<void> | null>(null);
   const infoShownForSessionRef = useRef<string | null>(null);
 
@@ -458,6 +528,7 @@ export default function App() {
           setCloudTransactions(adminData.transactions);
           setCloudInvestments(adminData.investments);
           setCloudReferrals(adminData.referrals);
+          setCloudGiftCodes(adminData.giftCodes || []);
           if (adminData.projects.length > 0) {
             setProjects(adminData.projects);
           }
@@ -626,6 +697,7 @@ export default function App() {
           setCloudTransactions([]);
           setCloudInvestments([]);
           setCloudReferrals([]);
+          setCloudGiftCodes(loadLocalGiftCodes());
         }
       } catch (err) {
         if (isSupabaseSchemaMissing(err)) {
@@ -1929,6 +2001,357 @@ export default function App() {
     }
   };
 
+  // Daily check-in (Pointage 30 F CFA / 24h, strictly no double credit)
+  useEffect(() => {
+    if (activeTab !== 'checkin') return;
+    setCheckinNowMs(Date.now());
+    const id = window.setInterval(() => setCheckinNowMs(Date.now()), 30000);
+    return () => window.clearInterval(id);
+  }, [activeTab]);
+
+  const lastCheckinMs = useMemo(() => {
+    let best = 0;
+    if (userProfile?.lastCheckinAt) {
+      const parsed = Date.parse(userProfile.lastCheckinAt);
+      if (!Number.isNaN(parsed)) best = Math.max(best, parsed);
+    }
+    transactions.forEach((tx) => {
+      if (tx.id.startsWith('tx_checkin_') || tx.method === 'Pointage quotidien 24h') {
+        const raw = tx.createdAt as { toMillis?: () => number } | string | undefined;
+        if (raw && typeof raw === 'object' && typeof raw.toMillis === 'function') {
+          best = Math.max(best, raw.toMillis());
+        } else if (typeof raw === 'string') {
+          const parsed = Date.parse(raw);
+          if (!Number.isNaN(parsed)) best = Math.max(best, parsed);
+        }
+      }
+    });
+    return best;
+  }, [userProfile?.lastCheckinAt, transactions]);
+
+  const checkinRemainingMs =
+    lastCheckinMs > 0
+      ? Math.max(0, lastCheckinMs + DAILY_CHECKIN_COOLDOWN_MS - checkinNowMs)
+      : 0;
+
+  const handleClaimDailyCheckin = async () => {
+    if (!userProfile || checkinLockRef.current || claimingCheckin) return;
+    checkinLockRef.current = true;
+    setClaimingCheckin(true);
+    try {
+      const nowMs = Date.now();
+      setCheckinNowMs(nowMs);
+      if (lastCheckinMs > 0 && nowMs - lastCheckinMs < DAILY_CHECKIN_COOLDOWN_MS) {
+        const left = lastCheckinMs + DAILY_CHECKIN_COOLDOWN_MS - nowMs;
+        showToast(`Pointage déjà effectué. Revenez dans ${formatCountdownHhMm(left)}.`);
+        return;
+      }
+
+      if (isSupabaseConfigured && supabase) {
+        const res = await sbClaimDailyCheckin();
+        setUserProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                balance: Math.round((prev.balance || 0) + res.amount),
+                lastCheckinAt: res.lastCheckinAt,
+                checkinDays: res.checkinDays,
+                checkinTotal: res.checkinTotal,
+              }
+            : prev
+        );
+        await refreshSupabaseState(userProfile, sbUser?.email, true);
+        showToast(`+${formatCFA(res.amount)} crédités ! Pointage validé pour 24h.`);
+        return;
+      }
+
+      const nowIso = new Date(nowMs).toISOString();
+      const nextDays = Math.max(0, Math.round(userProfile.checkinDays || 0)) + 1;
+      const nextTotal =
+        Math.max(0, Math.round(userProfile.checkinTotal || 0)) + DAILY_CHECKIN_BONUS_CFA;
+      const txId = sanitizeId(`tx_checkin_${userProfile.uid}_d${nextDays}`);
+
+      if (!firebaseUser && phoneSessionKey) {
+        const accounts = loadAccounts();
+        const rec = accounts[phoneSessionKey];
+        if (!rec) throw new Error('Session introuvable.');
+        const existingLast = rec.profile.lastCheckinAt ? Date.parse(rec.profile.lastCheckinAt) : 0;
+        if (existingLast > 0 && nowMs - existingLast < DAILY_CHECKIN_COOLDOWN_MS) {
+          throw new Error(
+            `Pointage déjà effectué. Prochain pointage dans ${formatCountdownHhMm(
+              existingLast + DAILY_CHECKIN_COOLDOWN_MS - nowMs
+            )}.`
+          );
+        }
+        if ((rec.transactions || []).some((t) => t.id === txId)) {
+          throw new Error('Récompense déjà créditée pour ce cycle.');
+        }
+
+        const checkinTx: TransactionItem = {
+          id: txId,
+          userId: userProfile.uid,
+          userName: userProfile.displayName,
+          type: 'credit',
+          amount: DAILY_CHECKIN_BONUS_CFA,
+          method: 'Pointage quotidien 24h',
+          phoneOrAccount: userProfile.phone || userProfile.referralCode,
+          reference: clampStr(`Bonus connexion quotidienne · Jour ${nextDays}`, 2, 100),
+          status: 'completed',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        mutateLocalAccount((cur) => ({
+          ...cur,
+          profile: {
+            ...cur.profile,
+            balance: Math.round((cur.profile.balance || 0) + DAILY_CHECKIN_BONUS_CFA),
+            lastCheckinAt: nowIso,
+            checkinDays: nextDays,
+            checkinTotal: nextTotal,
+            updatedAt: nowIso,
+          },
+          transactions: [checkinTx, ...(cur.transactions || [])],
+        }));
+        showToast(
+          `+${formatCFA(DAILY_CHECKIN_BONUS_CFA)} crédités ! Pointage validé pour 24h.`
+        );
+        return;
+      }
+
+      if (firebaseUser) {
+        const existingTx = await getDoc(doc(db, 'transactions', txId));
+        if (existingTx.exists()) {
+          throw new Error('Récompense déjà créditée pour ce cycle.');
+        }
+        await setDoc(doc(db, 'transactions', txId), {
+          id: txId,
+          userId: sanitizeId(firebaseUser.uid),
+          userName: clampStr(userProfile.displayName, 1, 100),
+          type: 'credit',
+          amount: DAILY_CHECKIN_BONUS_CFA,
+          method: 'Pointage quotidien 24h',
+          phoneOrAccount: userProfile.phone || userProfile.referralCode,
+          reference: clampStr(`Bonus connexion quotidienne · Jour ${nextDays}`, 2, 100),
+          status: 'completed',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        await updateDoc(doc(db, 'users', firebaseUser.uid), {
+          balance: Math.round((userProfile.balance || 0) + DAILY_CHECKIN_BONUS_CFA),
+          lastCheckinAt: nowIso,
+          checkinDays: nextDays,
+          checkinTotal: nextTotal,
+          updatedAt: serverTimestamp(),
+        });
+        showToast(
+          `+${formatCFA(DAILY_CHECKIN_BONUS_CFA)} crédités ! Pointage validé pour 24h.`
+        );
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erreur lors du pointage quotidien.');
+    } finally {
+      checkinLockRef.current = false;
+      setClaimingCheckin(false);
+    }
+  };
+
+  // Gift code redemption (random 10 to 100 F CFA, strictly 1 use per account per code)
+  const handleRedeemGiftCode = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!userProfile || giftCodeLockRef.current || redeemingGiftCode) return;
+    setGiftCodeFeedback(null);
+    const normalized = giftCodeInput
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, '');
+    if (normalized.length < 3) {
+      setGiftCodeFeedback({
+        type: 'error',
+        text: 'Veuillez saisir un code cadeau valide.',
+      });
+      return;
+    }
+
+    giftCodeLockRef.current = true;
+    setRedeemingGiftCode(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const res = await sbRedeemGiftCode(normalized);
+        setGiftCodeInput('');
+        setUserProfile((prev) =>
+          prev
+            ? { ...prev, balance: Math.round((prev.balance || 0) + res.amount) }
+            : prev
+        );
+        setGiftCodeFeedback({
+          type: 'success',
+          text: `Félicitations ! +${formatCFA(res.amount)} crédités sur votre solde (Code ${res.code}).`,
+        });
+        await refreshSupabaseState(userProfile, sbUser?.email, true);
+        showToast(`+${formatCFA(res.amount)} crédités grâce au code ${res.code} !`);
+        return;
+      }
+
+      const codes = loadLocalGiftCodes();
+      const targetCode = codes.find((c) => c.code.trim().toUpperCase() === normalized);
+      if (!targetCode) {
+        throw new Error('Code cadeau introuvable. Vérifiez le code dans le groupe Telegram.');
+      }
+      if (!targetCode.isActive) {
+        throw new Error("Ce code cadeau n'est plus actif.");
+      }
+      if (targetCode.maxUses > 0 && targetCode.usesCount >= targetCode.maxUses) {
+        throw new Error("Ce code cadeau a atteint sa limite d'utilisations.");
+      }
+
+      const redemptionsMap = loadLocalGiftRedemptions();
+      const userRedeemed = redemptionsMap[userProfile.uid] || [];
+      const txId = sanitizeId(`tx_giftcode_${userProfile.uid.slice(0, 12)}_${normalized}`);
+
+      if (
+        userRedeemed.includes(normalized) ||
+        transactions.some((t) => t.id === txId)
+      ) {
+        throw new Error('Vous avez déjà utilisé ce code cadeau. Aucun double crédit autorisé.');
+      }
+
+      const minAmt = Math.max(GIFT_CODE_MIN_CFA, Math.min(GIFT_CODE_MAX_CFA, targetCode.minAmount || GIFT_CODE_MIN_CFA));
+      const maxAmt = Math.max(minAmt, Math.min(GIFT_CODE_MAX_CFA, targetCode.maxAmount || GIFT_CODE_MAX_CFA));
+      const randomAmount = minAmt + Math.floor(Math.random() * (maxAmt - minAmt + 1));
+      const nowIso = new Date().toISOString();
+
+      if (!firebaseUser && phoneSessionKey) {
+        const giftTx: TransactionItem = {
+          id: txId,
+          userId: userProfile.uid,
+          userName: userProfile.displayName,
+          type: 'credit',
+          amount: randomAmount,
+          method: 'Code cadeau',
+          phoneOrAccount: normalized,
+          reference: clampStr(`Code cadeau ${normalized} (+${randomAmount} F CFA)`, 2, 100),
+          status: 'completed',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        const updatedCodes = codes.map((c) =>
+          c.code.trim().toUpperCase() === normalized
+            ? { ...c, usesCount: (c.usesCount || 0) + 1 }
+            : c
+        );
+        saveLocalGiftCodes(updatedCodes);
+        setCloudGiftCodes(updatedCodes);
+        redemptionsMap[userProfile.uid] = [...userRedeemed, normalized];
+        saveLocalGiftRedemptions(redemptionsMap);
+
+        mutateLocalAccount((cur) => ({
+          ...cur,
+          profile: {
+            ...cur.profile,
+            balance: Math.round((cur.profile.balance || 0) + randomAmount),
+            updatedAt: nowIso,
+          },
+          transactions: [giftTx, ...(cur.transactions || [])],
+        }));
+
+        setGiftCodeInput('');
+        setGiftCodeFeedback({
+          type: 'success',
+          text: `Félicitations ! +${formatCFA(randomAmount)} crédités sur votre solde (Code ${normalized}).`,
+        });
+        showToast(`+${formatCFA(randomAmount)} crédités grâce au code ${normalized} !`);
+        return;
+      }
+
+      if (firebaseUser) {
+        const existingTx = await getDoc(doc(db, 'transactions', txId));
+        if (existingTx.exists()) {
+          throw new Error('Vous avez déjà utilisé ce code cadeau. Aucun double crédit autorisé.');
+        }
+        await setDoc(doc(db, 'transactions', txId), {
+          id: txId,
+          userId: sanitizeId(firebaseUser.uid),
+          userName: clampStr(userProfile.displayName, 1, 100),
+          type: 'credit',
+          amount: randomAmount,
+          method: 'Code cadeau',
+          phoneOrAccount: normalized,
+          reference: clampStr(`Code cadeau ${normalized} (+${randomAmount} F CFA)`, 2, 100),
+          status: 'completed',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        await updateDoc(doc(db, 'users', firebaseUser.uid), {
+          balance: Math.round((userProfile.balance || 0) + randomAmount),
+          updatedAt: serverTimestamp(),
+        });
+        const updatedCodes = codes.map((c) =>
+          c.code.trim().toUpperCase() === normalized
+            ? { ...c, usesCount: (c.usesCount || 0) + 1 }
+            : c
+        );
+        saveLocalGiftCodes(updatedCodes);
+        setCloudGiftCodes(updatedCodes);
+        redemptionsMap[userProfile.uid] = [...userRedeemed, normalized];
+        saveLocalGiftRedemptions(redemptionsMap);
+        setGiftCodeInput('');
+        setGiftCodeFeedback({
+          type: 'success',
+          text: `Félicitations ! +${formatCFA(randomAmount)} crédités sur votre solde (Code ${normalized}).`,
+        });
+        showToast(`+${formatCFA(randomAmount)} crédités grâce au code ${normalized} !`);
+      }
+    } catch (err) {
+      setGiftCodeFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Impossible de valider ce code cadeau.',
+      });
+    } finally {
+      giftCodeLockRef.current = false;
+      setRedeemingGiftCode(false);
+    }
+  };
+
+  const handleAdminSaveGiftCode = async (item: GiftCodeItem) => {
+    const cleanCode = item.code
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, '');
+    if (cleanCode.length < 3) {
+      throw new Error('Le code cadeau doit contenir au moins 3 caractères.');
+    }
+    const minAmt = Math.max(GIFT_CODE_MIN_CFA, Math.min(GIFT_CODE_MAX_CFA, Math.round(item.minAmount || GIFT_CODE_MIN_CFA)));
+    const maxAmt = Math.max(minAmt, Math.min(GIFT_CODE_MAX_CFA, Math.round(item.maxAmount || GIFT_CODE_MAX_CFA)));
+    const normalizedItem: GiftCodeItem = {
+      code: cleanCode,
+      minAmount: minAmt,
+      maxAmount: maxAmt,
+      maxUses: Math.max(1, Math.round(item.maxUses || 500)),
+      usesCount: Math.max(0, Math.round(item.usesCount || 0)),
+      isActive: item.isActive,
+      createdAt: item.createdAt || new Date().toISOString(),
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      await sbAdminUpsertGiftCode(normalizedItem);
+      await refreshSupabaseState(userProfile, sbUser?.email, true);
+      return;
+    }
+
+    const current = loadLocalGiftCodes();
+    const exists = current.some((c) => c.code.toUpperCase() === cleanCode);
+    const updated = exists
+      ? current.map((c) =>
+          c.code.toUpperCase() === cleanCode
+            ? { ...c, ...normalizedItem, usesCount: c.usesCount }
+            : c
+        )
+      : [normalizedItem, ...current];
+    saveLocalGiftCodes(updated);
+    setCloudGiftCodes(updated);
+  };
+
   // Admin handlers
   const handleAdminSaveProject = async (proj: ProjectItem, isNew: boolean) => {
     const id = sanitizeId(proj.id);
@@ -2647,14 +3070,14 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => setInfoPopupOpen(true)}
+                onClick={() => setActiveTab('checkin')}
                 className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
               >
                 <div className="w-11 h-11 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-[#F5B800] flex items-center justify-center shadow-2xs">
                   <CalendarCheck className="w-6 h-6 stroke-[2]" />
                 </div>
                 <span className="text-xs sm:text-sm font-normal text-[#D97706] text-center leading-tight">
-                  Bonus
+                  Pointage
                 </span>
               </button>
             </section>
@@ -2705,6 +3128,111 @@ export default function App() {
                     +{formatCFA(totalDailyIncome)} / jour
                   </p>
                 </div>
+              </div>
+            </section>
+          </main>
+        )}
+
+        {/* TAB 1B: POINTAGE QUOTIDIEN (24H) */}
+        {activeTab === 'checkin' && (
+          <main className="space-y-4">
+            <div className="rounded-xl bg-white border border-[#EAECEF] px-3 py-2.5 flex items-center justify-between shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setActiveTab('home')}
+                className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-[#111827] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                aria-label="Retour à l'accueil"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <h1 className="text-base sm:text-lg font-medium text-[#111827]">Pointage</h1>
+              <div className="w-11" />
+            </div>
+
+            <section className="relative h-56 sm:h-64 rounded-2xl overflow-hidden border border-[#EAECEF] bg-[#D99B26] shadow-2xs">
+              <SafeImage
+                src={BRAND_IMAGES.brandShowcase}
+                alt="Bonus de pointage quotidien AURELIA MOBILE"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-[#D99B26]/80 to-[#D99B26] flex flex-col items-center justify-end pb-7 px-4 text-center">
+                <p className="text-sm sm:text-base font-normal text-white/95">Bonus cumulé</p>
+                <p className="text-3xl sm:text-4xl font-mono-num font-medium text-white mt-1 tracking-tight">
+                  {formatCFA(userProfile?.checkinTotal || 0)}
+                </p>
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white border border-[#EAECEF] p-5 sm:p-6 shadow-2xs space-y-5">
+              <div>
+                <p className="text-xs sm:text-sm font-normal text-[#4B5563]">
+                  Récompense de pointage quotidien
+                </p>
+                <p className="text-2xl sm:text-3xl font-mono-num font-medium text-[#111827] mt-1">
+                  {formatCFA(DAILY_CHECKIN_BONUS_CFA)}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between gap-4 pt-1 border-t border-[#F3F4F6]">
+                <div className="pt-3">
+                  <p className="text-xs sm:text-sm font-normal text-[#4B5563]">
+                    Nombre total de jours de pointage
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-mono-num font-medium text-[#111827] mt-1">
+                    {userProfile?.checkinDays || 0} jours
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void handleClaimDailyCheckin()}
+                  disabled={claimingCheckin || checkinRemainingMs > 0}
+                  className={`mt-3 min-h-[46px] px-6 rounded-md text-xs sm:text-sm font-medium transition-all shrink-0 ${
+                    checkinRemainingMs > 0
+                      ? 'bg-[#E5E7EB] text-[#6B7280] cursor-not-allowed'
+                      : 'aurelia-gold-btn cursor-pointer disabled:opacity-60'
+                  }`}
+                >
+                  {claimingCheckin
+                    ? 'Validation...'
+                    : checkinRemainingMs > 0
+                    ? `Dans ${formatCountdownHhMm(checkinRemainingMs)}`
+                    : 'Pointer (+30 FCFA)'}
+                </button>
+              </div>
+
+              <div className="pt-2 space-y-1.5 text-xs sm:text-[13px] text-[#4B5563] leading-relaxed">
+                <p>1. Récompense de connexion quotidienne : {formatCFA(DAILY_CHECKIN_BONUS_CFA)}.</p>
+                <p>2. Connectez-vous et pointez une fois toutes les 24 heures.</p>
+                <p>
+                  3. Pas de double crédit : votre compte est crédité une seule fois par cycle de
+                  24h.
+                </p>
+              </div>
+            </section>
+
+            <section className="relative h-28 sm:h-32 rounded-2xl overflow-hidden border border-[#EAECEF] bg-[#111827] shadow-2xs">
+              <SafeImage
+                src={BRAND_IMAGES.titanium}
+                alt="Produits VIP AURELIA MOBILE"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-[#D99B26]/90 via-black/45 to-black/75 px-5 flex items-center justify-between gap-4">
+                <div className="text-white space-y-0.5">
+                  <p className="text-sm sm:text-base font-medium leading-snug">
+                    Découvrez nos produits phares
+                  </p>
+                  <p className="text-xs text-white/85">
+                    Obtenez plus de revenus quotidiens
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('projects')}
+                  className="min-h-[42px] px-4 rounded-md bg-[#111827] text-white text-xs sm:text-sm font-medium border border-white/20 hover:bg-black transition-colors cursor-pointer shrink-0"
+                >
+                  ALLER &gt;
+                </button>
               </div>
             </section>
           </main>
@@ -3466,6 +3994,24 @@ export default function App() {
                       <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGiftCodeInput('');
+                        setGiftCodeFeedback(null);
+                        setAccountSubpage('gift_code');
+                      }}
+                      className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <Gift className="w-6 h-6 text-[#F5B800] shrink-0" />
+                        <span className="text-sm font-normal text-[#1F2937]">
+                          Utiliser un code cadeau
+                        </span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                    </button>
+
                     {isAdmin && (
                       <button
                         type="button"
@@ -4009,6 +4555,113 @@ export default function App() {
                 </div>
               </section>
             )}
+
+            {accountSubpage === 'gift_code' && (
+              <section className="space-y-4">
+                <div className="rounded-xl bg-white border border-[#EAECEF] px-3 py-2.5 flex items-center justify-between shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setAccountSubpage('menu')}
+                    className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-[#111827] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                    aria-label="Retour"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <h2 className="text-base sm:text-lg font-medium text-[#111827]">
+                    Utiliser un code cadeau
+                  </h2>
+                  <div className="w-11" />
+                </div>
+
+                <div className="h-44 sm:h-52 rounded-2xl overflow-hidden border border-[#EAECEF] bg-[#111827] shadow-2xs">
+                  <SafeImage
+                    src={BRAND_IMAGES.brandShowcase}
+                    alt="Code cadeau AURELIA MOBILE"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+
+                <p className="text-xs sm:text-sm text-[#4B5563] px-1">
+                  Vous pouvez obtenir un code cadeau dans le groupe officiel
+                </p>
+
+                <a
+                  href={TELEGRAM_GROUP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full min-h-[60px] rounded-xl bg-white border border-[#EAECEF] px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#F9FAFB] transition-colors shadow-2xs"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-full bg-[#0284C7] text-white flex items-center justify-center shrink-0">
+                      <Send className="w-5 h-5 -ml-0.5" />
+                    </div>
+                    <span className="text-sm font-medium text-[#111827]">
+                      Groupe AURELIA MOBILE
+                    </span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-[#9CA3AF] shrink-0" />
+                </a>
+
+                <form
+                  onSubmit={handleRedeemGiftCode}
+                  className="rounded-2xl bg-white border border-[#EAECEF] p-5 space-y-4 shadow-2xs"
+                >
+                  <div>
+                    <label
+                      htmlFor="gift-code-input"
+                      className="block text-sm font-medium text-[#111827] mb-2.5"
+                    >
+                      <span className="text-[#DC2626] mr-1">*</span>
+                      Code cadeau
+                    </label>
+                    <input
+                      id="gift-code-input"
+                      type="text"
+                      value={giftCodeInput}
+                      onChange={(e) => setGiftCodeInput(e.target.value.toUpperCase())}
+                      placeholder="Saisissez le code cadeau"
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      maxLength={32}
+                      required
+                      className="w-full min-h-[48px] px-4 rounded-lg bg-[#ECEEEF] border border-transparent focus:border-[#F5B800] focus:bg-white text-center text-sm font-mono-num tracking-wider text-[#111827] placeholder-[#6B7280] focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  {giftCodeFeedback && (
+                    <div
+                      className={`p-3 rounded-xl text-xs font-medium flex items-center gap-2 ${
+                        giftCodeFeedback.type === 'success'
+                          ? 'bg-emerald-50 border border-emerald-200 text-emerald-900'
+                          : 'bg-red-50 border border-red-200 text-red-900'
+                      }`}
+                    >
+                      {giftCodeFeedback.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 shrink-0 text-red-700" />
+                      )}
+                      <span>{giftCodeFeedback.text}</span>
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-[#6B7280] text-center">
+                    Récompense aléatoire de {formatCFA(GIFT_CODE_MIN_CFA)} à{' '}
+                    {formatCFA(GIFT_CODE_MAX_CFA)} · 1 seule utilisation par code et par compte.
+                  </p>
+
+                  <div className="pt-1 flex justify-center">
+                    <button
+                      type="submit"
+                      disabled={redeemingGiftCode}
+                      className="min-w-[200px] min-h-[46px] px-8 aurelia-gold-btn text-sm font-medium cursor-pointer disabled:opacity-50"
+                    >
+                      {redeemingGiftCode ? 'Validation...' : 'Confirmer'}
+                    </button>
+                  </div>
+                </form>
+              </section>
+            )}
           </main>
         )}
 
@@ -4021,12 +4674,14 @@ export default function App() {
               transactions={allTransactions}
               investments={allInvestments}
               referrals={allReferrals}
+              giftCodes={cloudGiftCodes}
               settings={settings}
               onSaveProject={handleAdminSaveProject}
               onResetOfficialVipCatalog={handleAdminSyncOfficialCatalog}
               onProcessTransaction={handleAdminProcessTransaction}
               onAdjustUserBalance={handleAdminAdjustBalance}
               onGiftProduct={handleAdminGiftProduct}
+              onSaveGiftCode={handleAdminSaveGiftCode}
               onSaveSettings={handleAdminSaveSettings}
               isCloudConnected={isSupabaseConfigured || !!firebaseUser}
               onConnectGoogleCloud={isSupabaseConfigured ? undefined : handleGoogleSignIn}
@@ -4055,6 +4710,7 @@ export default function App() {
             const Icon = item.icon;
             const active =
               activeTab === item.id ||
+              (item.id === 'home' && activeTab === 'checkin') ||
               (item.id === 'projects' && activeTab === 'investments') ||
               (item.id === 'account' && activeTab === 'admin');
             return (

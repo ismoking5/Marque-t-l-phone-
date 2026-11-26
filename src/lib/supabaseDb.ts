@@ -12,6 +12,7 @@ import {
 } from '../data/catalog';
 import { supabase } from '../supabase';
 import type {
+  GiftCodeItem,
   InvestmentItem,
   PhoneAuthPayload,
   PlatformSettings,
@@ -93,8 +94,23 @@ function mapProfileRow(row: Record<string, unknown>): UserProfile {
     referralBonus: Number(row.referral_bonus || 0),
     referralCount: Number(row.referral_count || 0),
     role: row.role === 'admin' ? 'admin' : 'user',
+    lastCheckinAt: row.last_checkin_at ? String(row.last_checkin_at) : null,
+    checkinDays: Number(row.checkin_days || 0),
+    checkinTotal: Number(row.checkin_total || 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapGiftCodeRow(row: Record<string, unknown>): GiftCodeItem {
+  return {
+    code: String(row.code || ''),
+    minAmount: Number(row.min_amount ?? 10),
+    maxAmount: Number(row.max_amount ?? 100),
+    maxUses: Number(row.max_uses ?? 1000),
+    usesCount: Number(row.uses_count ?? 0),
+    isActive: row.is_active !== false,
+    createdAt: row.created_at,
   };
 }
 
@@ -566,17 +582,26 @@ export async function sbLoadAdminData(): Promise<{
   investments: InvestmentItem[];
   referrals: ReferralItem[];
   projects: ProjectItem[];
+  giftCodes: GiftCodeItem[];
 }> {
   if (!supabase) {
-    return { users: [], transactions: [], investments: [], referrals: [], projects: [] };
+    return {
+      users: [],
+      transactions: [],
+      investments: [],
+      referrals: [],
+      projects: [],
+      giftCodes: [],
+    };
   }
 
-  const [uRes, txRes, invRes, refRes, projRes] = await Promise.all([
+  const [uRes, txRes, invRes, refRes, projRes, gcRes] = await Promise.all([
     supabase.from('profiles').select('*').order('created_at', { ascending: false }),
     supabase.from('transactions').select('*').order('created_at', { ascending: false }),
     supabase.from('investments').select('*').order('purchased_at_ms', { ascending: false }),
     supabase.from('referrals').select('*').order('created_at', { ascending: false }),
     supabase.from('projects').select('*').order('min_investment', { ascending: true }),
+    supabase.from('gift_codes').select('*').order('created_at', { ascending: false }),
   ]);
 
   if (uRes.error) {
@@ -589,6 +614,9 @@ export async function sbLoadAdminData(): Promise<{
     investments: (invRes.data || []).map((r) => mapInvestmentRow(r as Record<string, unknown>)),
     referrals: (refRes.data || []).map((r) => mapReferralRow(r as Record<string, unknown>)),
     projects: (projRes.data || []).map((r) => mapProjectRow(r as Record<string, unknown>)),
+    giftCodes: gcRes.error
+      ? []
+      : (gcRes.data || []).map((r) => mapGiftCodeRow(r as Record<string, unknown>)),
   };
 }
 
@@ -797,4 +825,71 @@ export async function sbAdminSaveSettings(settings: PlatformSettings): Promise<P
   });
   if (error) throw new Error(error.message);
   return cleaned;
+}
+
+export async function sbClaimDailyCheckin(): Promise<{
+  amount: number;
+  checkinDays: number;
+  checkinTotal: number;
+  lastCheckinAt: string;
+}> {
+  if (!supabase) throw new Error('Supabase non configuré.');
+  const { data, error } = await supabase.rpc('claim_daily_checkin');
+  if (error) {
+    if (error.code === 'PGRST202' || String(error.message).includes('claim_daily_checkin')) {
+      throw new Error(
+        'Fonction SQL pointage non encore installée. Exécutez la migration 20261126010000_checkin_and_gift_codes.sql dans Supabase.'
+      );
+    }
+    throw new Error(error.message);
+  }
+  const obj = (data || {}) as Record<string, unknown>;
+  return {
+    amount: Number(obj.amount || 30),
+    checkinDays: Number(obj.checkin_days || 1),
+    checkinTotal: Number(obj.checkin_total || 30),
+    lastCheckinAt: String(obj.last_checkin_at || new Date().toISOString()),
+  };
+}
+
+export async function sbRedeemGiftCode(rawCode: string): Promise<{
+  code: string;
+  amount: number;
+}> {
+  if (!supabase) throw new Error('Supabase non configuré.');
+  const { data, error } = await supabase.rpc('redeem_gift_code', {
+    p_code: rawCode.trim().toUpperCase(),
+  });
+  if (error) {
+    if (error.code === 'PGRST202' || String(error.message).includes('redeem_gift_code')) {
+      throw new Error(
+        'Fonction SQL code cadeau non encore installée. Exécutez la migration 20261126010000_checkin_and_gift_codes.sql dans Supabase.'
+      );
+    }
+    throw new Error(error.message);
+  }
+  const obj = (data || {}) as Record<string, unknown>;
+  return {
+    code: String(obj.code || rawCode.trim().toUpperCase()),
+    amount: Number(obj.amount || 0),
+  };
+}
+
+export async function sbAdminUpsertGiftCode(item: GiftCodeItem): Promise<void> {
+  if (!supabase) throw new Error('Supabase non configuré.');
+  const { error } = await supabase.rpc('admin_upsert_gift_code', {
+    p_code: item.code.trim().toUpperCase(),
+    p_min_amount: Math.max(10, Math.min(100, Math.round(item.minAmount || 10))),
+    p_max_amount: Math.max(10, Math.min(100, Math.round(item.maxAmount || 100))),
+    p_max_uses: Math.max(1, Math.round(item.maxUses || 1000)),
+    p_is_active: item.isActive !== false,
+  });
+  if (error) {
+    if (error.code === 'PGRST202' || String(error.message).includes('admin_upsert_gift_code')) {
+      throw new Error(
+        'Fonction SQL code cadeau non installée. Exécutez la migration 20261126010000_checkin_and_gift_codes.sql dans Supabase.'
+      );
+    }
+    throw new Error(error.message);
+  }
 }

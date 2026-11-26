@@ -268,6 +268,37 @@ export const ADMIN_EMAIL = 'ismailasawadogo10@gmail.com';
 export const DEFAULT_ADMIN_PHONE = '+226 77409899';
 export const DEFAULT_ADMIN_PASSWORD = 'Redbook@1';
 export const REGISTRATION_BONUS_CFA = 500;
+export const DAILY_CHECKIN_BONUS_CFA = 30;
+export const DAILY_CHECKIN_COOLDOWN_MS = 86_400_000;
+export const GIFT_CODE_MIN_CFA = 10;
+export const GIFT_CODE_MAX_CFA = 100;
+
+export const DEFAULT_GIFT_CODES = [
+  {
+    code: 'AURELIA2026',
+    minAmount: 10,
+    maxAmount: 100,
+    maxUses: 5000,
+    usesCount: 0,
+    isActive: true,
+  },
+  {
+    code: 'AURELIAGIFT',
+    minAmount: 10,
+    maxAmount: 100,
+    maxUses: 5000,
+    usesCount: 0,
+    isActive: true,
+  },
+  {
+    code: 'VIPBONUS',
+    minAmount: 10,
+    maxAmount: 100,
+    maxUses: 5000,
+    usesCount: 0,
+    isActive: true,
+  },
+];
 
 const ONE_DAY_MS = 86_400_000;
 
