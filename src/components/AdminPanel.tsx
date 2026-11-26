@@ -79,6 +79,7 @@ export function AdminPanel({
   onSaveSettings,
   isCloudConnected = false,
   onConnectGoogleCloud,
+  onRefreshAdmin,
 }: {
   projects: ProjectItem[];
   users: UserProfile[];
@@ -99,6 +100,7 @@ export function AdminPanel({
   onSaveSettings: (settings: PlatformSettings) => Promise<void>;
   isCloudConnected?: boolean;
   onConnectGoogleCloud?: () => Promise<void>;
+  onRefreshAdmin?: () => Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<
     'projects' | 'transactions' | 'investments' | 'referrals' | 'users' | 'settings'
@@ -131,9 +133,10 @@ export function AdminPanel({
   const [draftSettings, setDraftSettings] = useState<PlatformSettings>(settings);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
+  const settingsFingerprint = JSON.stringify(settings);
   useEffect(() => {
     setDraftSettings(settings);
-  }, [settings]);
+  }, [settingsFingerprint]);
 
   const notify = (msg: string) => {
     setToast(msg);
@@ -945,14 +948,35 @@ export function AdminPanel({
               Comptes membres inscrits ({filteredUsers.length}
               {userSearch.trim() ? ` / ${users.length}` : ''})
             </h3>
-            <button
-              type="button"
-              onClick={() => openGiftModal()}
-              className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
-            >
-              <Gift className="w-4 h-4" />
-              Offrir un produit
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {onRefreshAdmin && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      await onRefreshAdmin();
+                      notify('Liste des utilisateurs actualisée.');
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={saving}
+                  className="min-h-[40px] px-3.5 py-2 rounded-xl bg-white hover:bg-[#F8FAFC] border border-[#CBD5E1] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${saving ? 'animate-spin' : ''}`} />
+                  Actualiser
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => openGiftModal()}
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Gift className="w-4 h-4" />
+                Offrir un produit
+              </button>
+            </div>
           </div>
 
           <div className="relative">
@@ -970,12 +994,13 @@ export function AdminPanel({
             <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="text-xs font-extrabold text-amber-950">
-                  Mode téléphone local actif sur ce navigateur
+                  Base cloud non connectée sur ce déploiement
                 </p>
                 <p className="text-[11px] text-amber-900 leading-relaxed">
-                  Les inscriptions par numéro de téléphone sont enregistrées localement dans le
-                  navigateur utilisé lors de l&apos;inscription. Connectez le Cloud Google
-                  administrateur pour afficher tous les comptes synchronisés dans Firestore.
+                  Les comptes créés ici restent stockés uniquement sur cet appareil. Pour voir tous
+                  les inscrits dans Supabase, ajoutez <strong>VITE_SUPABASE_URL</strong> et{' '}
+                  <strong>VITE_SUPABASE_PUBLISHABLE_KEY</strong> dans Vercel → Settings → Environment
+                  Variables puis relancez un déploiement (<strong>Redeploy</strong>).
                 </p>
               </div>
               {onConnectGoogleCloud && (
@@ -984,7 +1009,7 @@ export function AdminPanel({
                   onClick={() => void onConnectGoogleCloud()}
                   className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] text-xs font-extrabold whitespace-nowrap cursor-pointer"
                 >
-                  Synchroniser le Cloud Google
+                  Synchroniser
                 </button>
               )}
             </div>

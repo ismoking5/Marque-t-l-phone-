@@ -350,6 +350,7 @@ export default function App() {
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const payoutSyncingRef = useRef(false);
+  const refreshSupabaseInflightRef = useRef<Promise<void> | null>(null);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -386,55 +387,70 @@ export default function App() {
 
   const refreshSupabaseState = async (activeProfile?: UserProfile | null, email?: string | null) => {
     if (!isSupabaseConfigured || !supabase) return;
-    try {
-      const pub = await sbFetchPublicData();
-      setSupabaseSchemaMissing(pub.schemaMissing);
-      setProjects(pub.projects);
-      setSettings(pub.settings);
-      if (pub.schemaMissing) return;
+    if (refreshSupabaseInflightRef.current) {
+      return refreshSupabaseInflightRef.current;
+    }
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const sessionUser = sessionData.session?.user;
-      if (!sessionUser && !activeProfile) return;
+    const task = (async () => {
+      try {
+        const pub = await sbFetchPublicData();
+        setSupabaseSchemaMissing(pub.schemaMissing);
+        setProjects(pub.projects);
+        setSettings(pub.settings);
+        if (pub.schemaMissing) return;
 
-      const credited = await sbSyncDailyPayouts();
-      let currentProf = activeProfile || null;
-      if (sessionUser) {
-        currentProf = await sbEnsureProfileForAuthUser(
-          sessionUser.id,
-          sessionUser.email || email || activeProfile?.email || ''
-        );
-        setUserProfile(currentProf);
-      }
-      if (!currentProf) return;
-      if (credited > 0) {
-        showToast(`+${formatCFA(credited)} de gains quotidiens crédités sur votre solde.`);
-      }
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sessionUser = sessionData.session?.user;
+        if (!sessionUser && !activeProfile) return;
 
-      const userData = await sbLoadUserData(currentProf.uid);
-      setInvestments(userData.investments);
-      setTransactions(userData.transactions);
-      setReferrals(userData.referrals);
+        const credited = await sbSyncDailyPayouts();
+        let currentProf = activeProfile || null;
+        if (sessionUser) {
+          currentProf = await sbEnsureProfileForAuthUser(
+            sessionUser.id,
+            sessionUser.email || email || activeProfile?.email || ''
+          );
+          setUserProfile(currentProf);
+        }
+        if (!currentProf) return;
+        if (credited > 0) {
+          showToast(`+${formatCFA(credited)} de gains quotidiens crédités sur votre solde.`);
+        }
 
-      const adminNow =
-        isAdminEmail(email || sessionUser?.email || currentProf.email) ||
-        isUniqueAdminPhone(currentProf.phone) ||
-        currentProf.role === 'admin';
-      if (adminNow) {
-        const adminData = await sbLoadAdminData();
-        setCloudUsers(adminData.users);
-        setCloudTransactions(adminData.transactions);
-        setCloudInvestments(adminData.investments);
-        setCloudReferrals(adminData.referrals);
-        if (adminData.projects.length > 0) {
-          setProjects(adminData.projects);
+        const userData = await sbLoadUserData(currentProf.uid);
+        setInvestments(userData.investments);
+        setTransactions(userData.transactions);
+        setReferrals(userData.referrals);
+
+        const adminNow =
+          isAdminEmail(email || sessionUser?.email || currentProf.email) ||
+          isUniqueAdminPhone(currentProf.phone) ||
+          currentProf.role === 'admin';
+        if (adminNow) {
+          const adminData = await sbLoadAdminData();
+          setCloudUsers(adminData.users);
+          setCloudTransactions(adminData.transactions);
+          setCloudInvestments(adminData.investments);
+          setCloudReferrals(adminData.referrals);
+          if (adminData.projects.length > 0) {
+            setProjects(adminData.projects);
+          }
+        }
+      } catch (err) {
+        if (isSupabaseSchemaMissing(err)) {
+          setSupabaseSchemaMissing(true);
+        } else {
+          console.debug('Supabase refresh info:', err);
         }
       }
-    } catch (err) {
-      if (isSupabaseSchemaMissing(err)) {
-        setSupabaseSchemaMissing(true);
-      } else {
-        console.debug('Supabase refresh info:', err);
+    })();
+
+    refreshSupabaseInflightRef.current = task;
+    try {
+      await task;
+    } finally {
+      if (refreshSupabaseInflightRef.current === task) {
+        refreshSupabaseInflightRef.current = null;
       }
     }
   };
@@ -616,7 +632,7 @@ export default function App() {
       void refreshSupabaseState(userProfile, sbUser.email);
     }, 15000);
     return () => window.clearInterval(timer);
-  }, [sbUser?.id, activeTab]);
+  }, [sbUser?.id, userProfile?.uid, activeTab]);
 
   // Load local phone account when not using Supabase or Firebase Auth
   useEffect(() => {
@@ -1015,6 +1031,11 @@ export default function App() {
           : 'Connexion réussie.'
       );
       return;
+    }
+
+    if (firebaseUser) {
+      await signOutFirebase().catch(() => undefined);
+      setFirebaseUser(null);
     }
 
     const dialCode = payload.dialCode.trim();
@@ -2381,8 +2402,17 @@ export default function App() {
     };
   }, [referrals, allReferrals, userProfile]);
 
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-[#F3F4F6] flex flex-col items-center justify-center p-6 text-center gap-4">
+        <BrandLogo compact={false} />
+        <p className="text-xs font-semibold text-[#475569]">Chargement sécurisé en cours...</p>
+      </div>
+    );
+  }
+
   // Render Auth screen when logged out
-  if (authReady && !(isSupabaseConfigured ? sbUser : firebaseUser || phoneSessionKey)) {
+  if (!(isSupabaseConfigured ? sbUser : firebaseUser || phoneSessionKey)) {
     return (
       <>
         {toastMsg && (
@@ -2391,6 +2421,21 @@ export default function App() {
             <span>{toastMsg}</span>
           </div>
         )}
+        {!isSupabaseConfigured &&
+          typeof window !== 'undefined' &&
+          !['localhost', '127.0.0.1'].includes(window.location.hostname) && (
+            <div className="max-w-lg mx-auto mt-3 px-4">
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-1">
+                <p className="font-extrabold">Synchronisation cloud non activée sur ce domaine</p>
+                <p className="leading-relaxed">
+                  Ajoutez <strong>VITE_SUPABASE_URL</strong> et{' '}
+                  <strong>VITE_SUPABASE_PUBLISHABLE_KEY</strong> dans Vercel → Settings → Environment
+                  Variables puis faites un <strong>Redeploy</strong> pour centraliser les
+                  inscriptions.
+                </p>
+              </div>
+            </div>
+          )}
         {isSupabaseConfigured && supabaseSchemaMissing && (
           <div className="max-w-lg mx-auto mt-3 px-4">
             <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-1">
@@ -3919,6 +3964,11 @@ export default function App() {
               onSaveSettings={handleAdminSaveSettings}
               isCloudConnected={isSupabaseConfigured || !!firebaseUser}
               onConnectGoogleCloud={isSupabaseConfigured ? undefined : handleGoogleSignIn}
+              onRefreshAdmin={
+                isSupabaseConfigured
+                  ? () => refreshSupabaseState(userProfile, sbUser?.email)
+                  : undefined
+              }
             />
           </main>
         )}

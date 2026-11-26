@@ -217,6 +217,8 @@ export async function sbFetchPublicData(): Promise<{
   return { projects, settings, schemaMissing: false };
 }
 
+const ensureProfileLocks = new Map<string, Promise<UserProfile>>();
+
 export async function sbEnsureProfileForAuthUser(
   authUid: string,
   email: string,
@@ -229,93 +231,166 @@ export async function sbEnsureProfileForAuthUser(
 ): Promise<UserProfile> {
   if (!supabase) throw new Error('Supabase non configuré.');
 
-  if (!isEligibleAuthEmail(email)) {
-    await supabase.auth.signOut();
-    throw new Error(
-      'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
-    );
+  const inflight = ensureProfileLocks.get(authUid);
+  if (inflight) {
+    return inflight;
   }
 
-  const existingRes = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('auth_uid', authUid)
-    .maybeSingle();
-
-  if (existingRes.error) {
-    if (isSupabaseSchemaMissing(existingRes.error)) {
+  const run = (async (): Promise<UserProfile> => {
+    if (!isEligibleAuthEmail(email)) {
+      await supabase.auth.signOut();
       throw new Error(
-        'Les tables Supabase ne sont pas encore créées. Exécutez la migration SQL dans votre projet Supabase (SQL Editor).'
+        'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
       );
     }
-    throw new Error(existingRes.error.message);
-  }
 
-  if (existingRes.data) {
-    const profile = mapProfileRow(existingRes.data as Record<string, unknown>);
-    const shouldBeAdmin = isAdminEmail(email) || isUniqueAdminPhone(profile.phone);
-    if (shouldBeAdmin && profile.role !== 'admin') {
-      await supabase.from('profiles').update({ role: 'admin' }).eq('uid', profile.uid);
-      profile.role = 'admin';
-    }
-    return profile;
-  }
-
-  const digitsFromEmail = email.split('@')[0].replace(/\D/g, '');
-  const cleanPhone = opts?.phone || (digitsFromEmail ? `+${digitsFromEmail}` : '');
-  const uid = digitsFromEmail
-    ? sanitizeId(`usr_${digitsFromEmail}`)
-    : sanitizeId(`usr_${authUid.replace(/-/g, '').slice(0, 16)}`);
-  const referralCode =
-    opts?.referralCode ||
-    sanitizeId(
-      `AM-${(digitsFromEmail || authUid.replace(/[^a-zA-Z0-9]/g, '')).slice(-6).toUpperCase().padStart(6, '0')}`
-    );
-  const country = opts?.country || 'Burkina Faso';
-  const defaultMethod =
-    COUNTRY_OPTIONS.find((c) => c.country === country)?.methods[0] || 'Orange Money Burkina';
-  const isAdminUser = isAdminEmail(email) || isUniqueAdminPhone(cleanPhone);
-
-  const insertPayload = {
-    uid,
-    auth_uid: authUid,
-    email: clampStr(email, 3, 254),
-    display_name: clampStr(cleanPhone || email.split('@')[0], 1, 100),
-    phone: clampStr(cleanPhone, 0, 30),
-    withdrawal_country: country,
-    withdrawal_method: defaultMethod,
-    withdrawal_account: cleanPhone,
-    withdrawal_holder: cleanPhone || email.split('@')[0],
-    balance: 0,
-    total_invested: 0,
-    total_earned: 0,
-    referral_code: referralCode,
-    referred_by: '',
-    referral_bonus: 0,
-    referral_count: 0,
-    role: isAdminUser ? 'admin' : 'user',
-  };
-
-  const insertRes = await supabase.from('profiles').insert(insertPayload).select('*').single();
-  if (insertRes.error) {
-    throw new Error(insertRes.error.message);
-  }
-
-  if (opts?.referredBy) {
-    await supabase.rpc('register_referral_tree', {
-      p_invite_code: opts.referredBy,
-    });
-    const refreshed = await supabase
+    const existingRes = await supabase
       .from('profiles')
       .select('*')
       .eq('auth_uid', authUid)
       .maybeSingle();
-    if (refreshed.data) {
-      return mapProfileRow(refreshed.data as Record<string, unknown>);
-    }
-  }
 
-  return mapProfileRow(insertRes.data as Record<string, unknown>);
+    if (existingRes.error) {
+      if (isSupabaseSchemaMissing(existingRes.error)) {
+        throw new Error(
+          'Les tables Supabase ne sont pas encore créées. Exécutez la migration SQL dans votre projet Supabase (SQL Editor).'
+        );
+      }
+      throw new Error(existingRes.error.message);
+    }
+
+    let meta: Record<string, unknown> = {};
+    if (!existingRes.data || !opts?.referredBy) {
+      const authUserRes = await supabase.auth.getUser().catch(() => null);
+      if (authUserRes?.data?.user?.id === authUid && authUserRes.data.user.user_metadata) {
+        meta = authUserRes.data.user.user_metadata as Record<string, unknown>;
+      }
+    }
+
+    const effectiveReferredBy =
+      opts?.referredBy ||
+      (typeof meta.referred_by === 'string' ? meta.referred_by.trim() : '');
+
+    if (existingRes.data) {
+      const profile = mapProfileRow(existingRes.data as Record<string, unknown>);
+      const shouldBeAdmin = isAdminEmail(email) || isUniqueAdminPhone(profile.phone);
+      if (shouldBeAdmin && profile.role !== 'admin') {
+        await supabase.from('profiles').update({ role: 'admin' }).eq('uid', profile.uid);
+        profile.role = 'admin';
+      }
+      if (effectiveReferredBy && !profile.referredBy) {
+        await supabase.rpc('register_referral_tree', {
+          p_invite_code: effectiveReferredBy,
+        });
+        const refreshed = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('auth_uid', authUid)
+          .maybeSingle();
+        if (refreshed.data) {
+          return mapProfileRow(refreshed.data as Record<string, unknown>);
+        }
+      }
+      return profile;
+    }
+
+    const digitsFromEmail = email.split('@')[0].replace(/\D/g, '');
+    const metaPhone = typeof meta.phone === 'string' ? meta.phone.trim() : '';
+    const metaCountry = typeof meta.country === 'string' ? meta.country.trim() : '';
+    const metaRefCode = typeof meta.referral_code === 'string' ? meta.referral_code.trim() : '';
+
+    const cleanPhone = opts?.phone || metaPhone || (digitsFromEmail ? `+${digitsFromEmail}` : '');
+    const uid = digitsFromEmail
+      ? sanitizeId(`usr_${digitsFromEmail}`)
+      : sanitizeId(`usr_${authUid.replace(/-/g, '').slice(0, 16)}`);
+    const baseReferralCode =
+      opts?.referralCode ||
+      metaRefCode ||
+      sanitizeId(
+        `AM-${(digitsFromEmail || authUid.replace(/[^a-zA-Z0-9]/g, '')).slice(-6).toUpperCase().padStart(6, '0')}`
+      );
+    const country = opts?.country || metaCountry || 'Burkina Faso';
+    const defaultMethod =
+      COUNTRY_OPTIONS.find((c) => c.country === country)?.methods[0] || 'Orange Money Burkina';
+    const isAdminUser = isAdminEmail(email) || isUniqueAdminPhone(cleanPhone);
+
+    const buildPayload = (refCode: string) => ({
+      uid,
+      auth_uid: authUid,
+      email: clampStr(email, 3, 254),
+      display_name: clampStr(cleanPhone || email.split('@')[0], 1, 100),
+      phone: clampStr(cleanPhone, 0, 30),
+      withdrawal_country: country,
+      withdrawal_method: defaultMethod,
+      withdrawal_account: cleanPhone,
+      withdrawal_holder: cleanPhone || email.split('@')[0],
+      balance: 0,
+      total_invested: 0,
+      total_earned: 0,
+      referral_code: refCode,
+      referred_by: '',
+      referral_bonus: 0,
+      referral_count: 0,
+      role: isAdminUser ? 'admin' : 'user',
+    });
+
+    let insertRes = await supabase.from('profiles').insert(buildPayload(baseReferralCode)).select('*').single();
+    let profileRow = insertRes.data as Record<string, unknown> | null;
+
+    if (insertRes.error && insertRes.error.code === '23505') {
+      // Either concurrent insert succeeded for same auth_uid, or referral_code collided across countries
+      const retryExisting = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('auth_uid', authUid)
+        .maybeSingle();
+      if (retryExisting.data) {
+        profileRow = retryExisting.data as Record<string, unknown>;
+      } else {
+        const uniqueReferralCode = sanitizeId(
+          `AM-${(digitsFromEmail || '000000').slice(-6).toUpperCase()}-${authUid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase()}`
+        );
+        const retryInsert = await supabase
+          .from('profiles')
+          .insert(buildPayload(uniqueReferralCode))
+          .select('*')
+          .single();
+        if (retryInsert.error) {
+          throw new Error(retryInsert.error.message);
+        }
+        profileRow = retryInsert.data as Record<string, unknown> | null;
+      }
+    } else if (insertRes.error) {
+      throw new Error(insertRes.error.message);
+    }
+
+    if (!profileRow) {
+      throw new Error('Impossible de créer le profil utilisateur.');
+    }
+
+    if (effectiveReferredBy) {
+      await supabase.rpc('register_referral_tree', {
+        p_invite_code: effectiveReferredBy,
+      });
+      const refreshed = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('auth_uid', authUid)
+        .maybeSingle();
+      if (refreshed.data) {
+        return mapProfileRow(refreshed.data as Record<string, unknown>);
+      }
+    }
+
+    return mapProfileRow(profileRow);
+  })();
+
+  ensureProfileLocks.set(authUid, run);
+  try {
+    return await run;
+  } finally {
+    ensureProfileLocks.delete(authUid);
+  }
 }
 
 export async function sbPhoneAuth(payload: PhoneAuthPayload): Promise<UserProfile> {
@@ -355,6 +430,8 @@ export async function sbPhoneAuth(payload: PhoneAuthPayload): Promise<UserProfil
         data: {
           phone: fullPhone,
           country: payload.country,
+          referral_code: referralCode,
+          referred_by: referredBy,
         },
       },
     });
@@ -498,6 +575,10 @@ export async function sbLoadAdminData(): Promise<{
     supabase.from('referrals').select('*').order('created_at', { ascending: false }),
     supabase.from('projects').select('*').order('min_investment', { ascending: true }),
   ]);
+
+  if (uRes.error) {
+    throw new Error(uRes.error.message);
+  }
 
   return {
     users: (uRes.data || []).map((r) => mapProfileRow(r as Record<string, unknown>)),
