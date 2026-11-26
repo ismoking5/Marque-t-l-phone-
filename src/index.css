@@ -8,8 +8,8 @@
 
 @layer base {
   body {
-    background-color: #F3F4F6;
-    color: #0F172A;
+    background-color: #F4F5F7;
+    color: #111827;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
@@ -26,6 +26,30 @@
 .font-mono-num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.aurelia-gold-box {
+  background-color: #F5B800;
+  color: #111827;
+  border: 1.5px solid #111827;
+  box-shadow: 3px 3px 0px #111827;
+}
+
+.aurelia-gold-btn {
+  background-color: #F5B800;
+  color: #111827;
+  border: 1.5px solid #111827;
+  box-shadow: 3px 3px 0px #111827;
+  transition: background-color 150ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.aurelia-gold-btn:hover {
+  background-color: #E5AC00;
+}
+
+.aurelia-gold-btn:active {
+  transform: translate(1.5px, 1.5px);
+  box-shadow: 1.5px 1.5px 0px #111827;
 }
 
 .scrollbar-none::-webkit-scrollbar {

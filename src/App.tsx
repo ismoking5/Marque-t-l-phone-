@@ -5,8 +5,11 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Award,
+  Bell,
+  CalendarCheck,
   CheckCircle2,
   ChevronRight,
+  CircleDollarSign,
   CreditCard,
   FileText,
   Headphones,
@@ -19,7 +22,6 @@ import {
   Smartphone,
   User,
   Users,
-  Volume2,
   Wallet,
 } from 'lucide-react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -2523,16 +2525,16 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] text-[#0F172A] pb-24">
+    <div className="min-h-screen bg-[#F4F5F7] text-[#111827] pb-24">
       {toastMsg && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] px-4 py-3 rounded-2xl bg-[#0F172A] text-white shadow-lg border border-[#F5C533]/40 flex items-center gap-2.5 text-xs font-bold">
-          <CheckCircle2 className="w-4 h-4 text-[#F5C533] shrink-0" />
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] px-4 py-3 rounded-2xl bg-[#111827] text-white shadow-lg border border-[#F5B800]/50 flex items-center gap-2.5 text-xs font-medium">
+          <CheckCircle2 className="w-4 h-4 text-[#F5B800] shrink-0" />
           <span>{toastMsg}</span>
         </div>
       )}
 
-      <div className="max-w-5xl mx-auto px-3.5 sm:px-6 pt-3 sm:pt-5 space-y-5">
-        <header className="flex items-center justify-between gap-3 bg-white border border-[#E2E5EC] rounded-2xl px-4 py-2.5 shadow-2xs">
+      <div className="max-w-5xl mx-auto px-3.5 sm:px-6 pt-3 sm:pt-5 space-y-4">
+        <header className="flex items-center justify-between gap-3 bg-white border border-[#EAECEF] rounded-2xl px-4 py-2.5 shadow-2xs">
           <button
             type="button"
             onClick={() => setActiveTab('home')}
@@ -2544,7 +2546,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActiveTab('admin')}
-              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#0F172A] text-[#F5C533] text-xs font-extrabold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              className="min-h-[40px] px-3.5 py-1.5 rounded-md aurelia-gold-btn text-xs font-medium flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Shield className="w-4 h-4" />
               <span className="sm:hidden">Admin</span>
@@ -2553,188 +2555,199 @@ export default function App() {
           )}
         </header>
 
-        {/* TAB 1: HOME */}
+        {/* TAB 1: ACCUEIL */}
         {activeTab === 'home' && (
-          <main className="space-y-3.5 sm:space-y-4">
-            <section className="relative h-72 sm:h-88 md:h-96 rounded-2xl overflow-hidden border border-[#CBD5E1] shadow-sm bg-[#0F172A]">
+          <main className="space-y-4">
+            <section className="relative h-56 sm:h-72 md:h-80 rounded-2xl overflow-hidden border border-[#EAECEF] bg-[#111827] shadow-2xs">
               <SafeImage
-                src={BRAND_IMAGES.hero}
-                alt="Smartphones haut de gamme AURELIA MOBILE"
+                src={BRAND_IMAGES.brandShowcase}
+                alt="Nouveautés smartphones AURELIA MOBILE"
                 className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#020617]/95 via-[#0F172A]/55 to-black/25 flex flex-col justify-end items-center text-center p-5 sm:p-8">
-                <p className="text-xs sm:text-sm font-bold tracking-wider uppercase text-[#F5C533]">
-                  AURELIA MOBILE · Haute Technologie &amp; Titane
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex flex-col justify-end p-5 sm:p-7">
+                <p className="text-xs sm:text-sm font-medium text-[#F5B800] tracking-wide">
+                  AURELIA MOBILE · Gamme Flagship
                 </p>
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold font-display text-white mt-1 max-w-xl leading-tight">
-                  L&apos;excellence du smartphone, le rendement au quotidien.
+                <h1 className="text-2xl sm:text-3xl font-normal font-display text-white leading-tight mt-0.5">
+                  Nouveautés
+                  <span className="block font-medium">Produits phares</span>
                 </h1>
-                <p className="text-xs sm:text-sm text-slate-200 mt-1.5 max-w-md">
-                  Équipez notre réseau de distribution de téléphones haut de gamme et percevez vos
-                  revenus quotidiens automatiquement.
-                </p>
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs font-extrabold tracking-wide">
-                  <span className="text-[#F5C533]">TITANE &amp; VERRE SAPHIR</span>
-                  <span className="text-white/50" aria-hidden="true">
-                    ·
-                  </span>
-                  <span className="text-white font-mono-num">CYCLE 90 JOURS</span>
-                </div>
-              </div>
-            </section>
-
-            <section
-              aria-label="Actions principales"
-              className="rounded-2xl bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#0F172A] border border-[#334155] text-white shadow-xs overflow-hidden"
-            >
-              <div className="grid grid-cols-3 divide-x divide-white/15">
-                <button
-                  type="button"
-                  onClick={() => setDepositModalOpen(true)}
-                  className="min-h-[76px] py-4 px-2 flex flex-col items-center justify-center gap-2 hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  <Wallet className="w-7 h-7 text-[#F5C533]" />
-                  <span className="text-xs sm:text-sm font-bold text-white text-center leading-tight">
-                    Recharger
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWithdrawModalOpen(true)}
-                  className="min-h-[76px] py-4 px-2 flex flex-col items-center justify-center gap-2 hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  <ArrowUpRight className="w-7 h-7 text-[#F5C533]" />
-                  <span className="text-xs sm:text-sm font-bold text-white text-center leading-tight">
-                    Retirer de l&apos;argent
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSupportModalOpen(true)}
-                  className="min-h-[76px] py-4 px-2 flex flex-col items-center justify-center gap-2 hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  <Headphones className="w-7 h-7 text-[#F5C533]" />
-                  <span className="text-xs sm:text-sm font-bold text-white text-center leading-tight">
-                    Service client
-                  </span>
-                </button>
               </div>
             </section>
 
             <section
               aria-label="Annonces et activités récentes"
-              className="rounded-xl bg-white border border-[#E2E5EC] px-3.5 py-2.5 flex items-center gap-3 shadow-2xs overflow-hidden"
+              className="rounded-xl bg-white border border-[#EAECEF] px-3.5 py-2.5 flex items-center gap-2.5 shadow-2xs overflow-hidden"
             >
-              <div className="w-7 h-7 rounded-lg bg-[#F5C533]/25 text-[#0F172A] flex items-center justify-center shrink-0">
-                <Volume2 className="w-4 h-4 text-[#0F172A]" />
-              </div>
-              <div className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none text-xs sm:text-sm font-medium text-[#0F172A]">
+              <Bell className="w-5 h-5 text-[#F5B800] fill-[#F5B800] shrink-0" />
+              <div className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none text-xs sm:text-sm font-normal text-[#374151]">
                 {sortedTransactions.length > 0 ? (
                   <span>
-                    <strong className="text-[#0F172A]">Activité récente :</strong>{' '}
+                    <span className="font-medium text-[#111827]">Activité :</span>{' '}
                     {transactionTypeLabel(sortedTransactions[0].type)}{' '}
-                    <span className="font-mono-num font-bold">
+                    <span className="font-mono-num font-medium text-[#111827]">
                       {formatCFA(sortedTransactions[0].amount)}
                     </span>{' '}
                     · <span>{settings.announcement}</span>
                   </span>
                 ) : (
                   <span>
-                    <strong className="text-[#0F172A]">Info AURELIA MOBILE :</strong>{' '}
+                    <span className="font-medium text-[#111827]">Info :</span>{' '}
                     {settings.announcement} ·{' '}
-                    <span className="font-mono-num">
-                      ******9899 Recharge 15 000 F CFA · ******4120 Revenu VIP +2 500 F CFA
+                    <span className="font-mono-num text-[#4B5563]">
+                      ******9899 a rechargé 15 000 FCFA · ******4120 a perçu 2 500 FCFA
                     </span>
                   </span>
                 )}
               </div>
             </section>
 
-            <section aria-label="Informations financières" className="grid grid-cols-2 gap-3 sm:gap-4">
-              <div className="rounded-2xl overflow-hidden border border-[#CBD5E1] bg-[#0F172A] shadow-xs flex flex-col">
-                <div className="bg-[#020617] py-3 px-2 text-center border-b border-white/10">
-                  <span className="text-sm sm:text-lg font-mono-num font-extrabold text-[#F5C533]">
-                    {formatCFA(userProfile?.balance || 0)}
-                  </span>
+            <section
+              aria-label="Actions rapides"
+              className="grid grid-cols-4 gap-2 py-1"
+            >
+              <button
+                type="button"
+                onClick={() => setDepositModalOpen(true)}
+                className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
+              >
+                <div className="w-11 h-11 rounded-full bg-[#F5B800] text-white flex items-center justify-center shadow-2xs">
+                  <CircleDollarSign className="w-6 h-6 stroke-[2]" />
                 </div>
-                <div className="relative h-32 sm:h-40 w-full overflow-hidden">
+                <span className="text-xs sm:text-sm font-normal text-[#D97706] text-center leading-tight">
+                  Dépôt
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setWithdrawModalOpen(true)}
+                className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
+              >
+                <div className="w-11 h-11 rounded-xl bg-[#F5B800] text-white flex items-center justify-center shadow-2xs">
+                  <CreditCard className="w-6 h-6 stroke-[2]" />
+                </div>
+                <span className="text-xs sm:text-sm font-normal text-[#D97706] text-center leading-tight">
+                  Retrait
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSupportModalOpen(true)}
+                className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
+              >
+                <div className="w-11 h-11 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-[#F5B800] flex items-center justify-center shadow-2xs">
+                  <Headphones className="w-6 h-6 stroke-[2]" />
+                </div>
+                <span className="text-xs sm:text-sm font-normal text-[#D97706] text-center leading-tight">
+                  Aide
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setInfoPopupOpen(true)}
+                className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
+              >
+                <div className="w-11 h-11 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-[#F5B800] flex items-center justify-center shadow-2xs">
+                  <CalendarCheck className="w-6 h-6 stroke-[2]" />
+                </div>
+                <span className="text-xs sm:text-sm font-normal text-[#D97706] text-center leading-tight">
+                  Bonus
+                </span>
+              </button>
+            </section>
+
+            <section
+              aria-label="Solde et cumul"
+              className="grid grid-cols-1 md:grid-cols-2 gap-3.5"
+            >
+              <div className="rounded-2xl bg-white border border-[#EAECEF] p-4 sm:p-5 shadow-2xs flex items-center justify-between gap-4">
+                <div className="w-28 h-24 sm:w-32 sm:h-28 rounded-xl overflow-hidden bg-[#F8FAFC] border border-[#F1F5F9] shrink-0">
                   <SafeImage
                     src={BRAND_IMAGES.titanium}
                     alt="Smartphone titane brossé AURELIA MOBILE"
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#020617]/85 via-[#0F172A]/45 to-transparent flex items-end justify-center p-2.5">
-                    <span className="text-[11px] sm:text-xs font-medium text-slate-200 text-center">
-                      {activeInvestmentsCount > 0
-                        ? `${activeInvestmentsCount} modèle(s) VIP actif(s)`
-                        : 'Disponible immédiatement'}
-                    </span>
-                  </div>
                 </div>
-                <div className="bg-[#1E293B] py-3 px-2 text-center border-t border-white/10">
-                  <span className="text-xs sm:text-sm font-bold text-white">Solde du compte</span>
+                <div className="flex-1 min-w-0 flex flex-col items-end justify-center gap-2.5 text-right">
+                  <div className="aurelia-gold-box px-6 py-2 min-w-[140px] sm:min-w-[168px] text-center text-sm sm:text-base font-normal">
+                    Solde
+                  </div>
+                  <p className="text-xl sm:text-2xl font-mono-num font-medium text-[#DC2626] tracking-tight">
+                    {formatCFA(userProfile?.balance || 0)}
+                  </p>
+                  <p className="text-[11px] sm:text-xs text-[#6B7280] font-normal">
+                    {activeInvestmentsCount > 0
+                      ? `${activeInvestmentsCount} produit(s) VIP actif(s)`
+                      : 'Disponible immédiatement'}
+                  </p>
                 </div>
               </div>
 
-              <div className="rounded-2xl overflow-hidden border border-[#CBD5E1] bg-[#1E293B] shadow-xs flex flex-col">
-                <div className="bg-[#0F172A] py-3 px-2 text-center border-b border-white/10">
-                  <span className="text-sm sm:text-lg font-mono-num font-extrabold text-[#F5C533]">
-                    {formatCFA(userProfile?.totalEarned || 0)}
-                  </span>
-                </div>
-                <div className="relative h-32 sm:h-40 w-full overflow-hidden">
+              <div className="rounded-2xl bg-white border border-[#EAECEF] p-4 sm:p-5 shadow-2xs flex items-center justify-between gap-4">
+                <div className="w-28 h-24 sm:w-32 sm:h-28 rounded-xl overflow-hidden bg-[#F8FAFC] border border-[#F1F5F9] shrink-0">
                   <SafeImage
                     src={BRAND_IMAGES.ceramic}
                     alt="Édition Céramique & Or AURELIA MOBILE"
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#020617]/85 via-[#1E293B]/45 to-transparent flex items-end justify-center p-2.5">
-                    <span className="text-[11px] sm:text-xs font-medium text-amber-100 text-center font-mono-num">
-                      +{formatCFA(totalDailyIncome)} / jour
-                    </span>
-                  </div>
                 </div>
-                <div className="bg-[#334155] py-3 px-2 text-center border-t border-white/10">
-                  <span className="text-xs sm:text-sm font-bold text-white">Revenus totaux</span>
+                <div className="flex-1 min-w-0 flex flex-col items-end justify-center gap-2.5 text-right">
+                  <div className="aurelia-gold-box px-6 py-2 min-w-[140px] sm:min-w-[168px] text-center text-sm sm:text-base font-normal">
+                    Cumul
+                  </div>
+                  <p className="text-xl sm:text-2xl font-mono-num font-medium text-[#DC2626] tracking-tight">
+                    {formatCFA(userProfile?.totalEarned || 0)}
+                  </p>
+                  <p className="text-[11px] sm:text-xs text-[#6B7280] font-mono-num font-normal">
+                    +{formatCFA(totalDailyIncome)} / jour
+                  </p>
                 </div>
               </div>
             </section>
           </main>
         )}
 
-        {/* TAB 2: PRODUCTS CATALOG */}
+        {/* TAB 2: PRODUITS */}
         {activeTab === 'projects' && (
           <main className="space-y-4">
-            <section className="relative h-48 sm:h-56 rounded-2xl overflow-hidden border border-[#CBD5E1] bg-[#0F172A] flex items-center justify-center px-4">
-              <SafeImage
-                src={BRAND_IMAGES.hero}
-                alt="Gamme Smartphones VIP AURELIA MOBILE"
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-[#0F172A]/45 to-black/60" />
-              <div className="relative z-10 w-full max-w-md rounded-2xl bg-white/95 backdrop-blur-xs shadow-lg border border-[#E2E5EC] py-3.5 px-4 grid grid-cols-2 divide-x divide-[#E2E5EC]">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('investments')}
-                  className="min-h-[44px] flex flex-col items-center justify-center text-center px-2 cursor-pointer hover:opacity-80 transition-opacity"
-                >
-                  <span className="text-lg sm:text-xl font-mono-num font-extrabold text-[#0F172A]">
-                    {activeInvestmentsCount}
-                  </span>
-                  <span className="text-xs sm:text-sm text-[#475569] font-medium mt-0.5">
-                    Mon produit
-                  </span>
-                </button>
-                <div className="flex flex-col items-center justify-center text-center px-2">
-                  <span className="text-lg sm:text-xl font-mono-num font-extrabold text-[#0F172A]">
-                    {formatCFA(userProfile?.totalEarned || 0)}
-                  </span>
-                  <span className="text-xs sm:text-sm text-[#475569] font-medium mt-0.5">
-                    Mes revenus
-                  </span>
-                </div>
-              </div>
+            <h2 className="text-base sm:text-lg font-normal text-[#1F2937] text-center pt-1">
+              Mes produits et mes revenus
+            </h2>
+
+            <section className="grid grid-cols-2 gap-3.5 max-w-2xl mx-auto">
+              <button
+                type="button"
+                onClick={() => setActiveTab('investments')}
+                className="aurelia-gold-btn py-3.5 px-3 flex flex-col items-center justify-center text-center cursor-pointer"
+              >
+                <span className="text-xl sm:text-2xl font-mono-num font-medium text-[#111827] leading-tight">
+                  {activeInvestmentsCount}
+                </span>
+                <span className="text-xs sm:text-sm font-normal text-[#111827] mt-1">
+                  Mes produits &gt;
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('investments')}
+                className="aurelia-gold-btn py-3.5 px-3 flex flex-col items-center justify-center text-center cursor-pointer"
+              >
+                <span className="text-lg sm:text-2xl font-mono-num font-medium text-[#111827] leading-tight">
+                  {formatCFA(userProfile?.totalEarned || 0)}
+                </span>
+                <span className="text-xs sm:text-sm font-normal text-[#111827] mt-1">
+                  Mes revenus &gt;
+                </span>
+              </button>
             </section>
+
+            <h3 className="text-base sm:text-lg font-normal text-[#1F2937] text-center pt-1">
+              Produits phares
+            </h3>
 
             <section className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {visibleProjects.map((project) => {
@@ -2757,79 +2770,75 @@ export default function App() {
                 return (
                   <article
                     key={project.id}
-                    className="rounded-2xl bg-white border border-[#E2E5EC] p-4 sm:p-5 shadow-2xs hover:border-[#0F172A]/40 transition-colors"
+                    className="rounded-xl bg-white border border-[#EAECEF] p-4 sm:p-5 shadow-2xs flex items-center justify-between gap-4"
                   >
-                    <div className="flex gap-4 sm:gap-5 items-center">
-                      <div className="w-24 h-28 sm:w-28 sm:h-32 rounded-xl overflow-hidden shrink-0 border border-[#E2E5EC] bg-[#F8FAFC]">
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div>
+                        <h4 className="text-base sm:text-lg font-normal text-[#111827] leading-snug">
+                          {project.title}
+                        </h4>
+                        <p className="text-[11px] font-normal text-[#6B7280] truncate">
+                          {project.category}
+                        </p>
+                      </div>
+
+                      <div className="flex items-baseline justify-between gap-2 text-sm">
+                        <span className="text-[#DC2626] font-normal">Prix :</span>
+                        <span className="font-mono-num font-medium text-[#DC2626] text-base">
+                          {formatCFA(project.minInvestment)}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1 text-xs sm:text-[13px] text-[#374151] font-normal">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[#4B5563]">Durée :</span>
+                          <span className="font-mono-num text-[#111827]">
+                            {duration} jours
+                            {(isActiveOwned || isExpiredOwned) && (
+                              <span className="text-[#0F766E] ml-1">
+                                ({remainingDays}j ·{' '}
+                                {isExpiredOwned ? 'Expiré' : `×${ownership.activeCount}`})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[#4B5563]">Revenu quotidien :</span>
+                          <span className="font-mono-num text-[#111827]">{formatCFA(daily)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[#4B5563]">Revenu total :</span>
+                          <span className="font-mono-num text-[#111827]">
+                            {formatCFA(totalReturn)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="w-28 sm:w-32 shrink-0 flex flex-col gap-2.5">
+                      <div className="w-28 h-24 sm:w-32 sm:h-28 rounded-lg overflow-hidden border border-[#EAECEF] bg-[#F8FAFC]">
                         <SafeImage
                           src={project.imageUrl}
                           alt={project.title}
                           className="w-full h-full object-cover"
                         />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <div className="min-w-0">
-                            <h3 className="text-base sm:text-lg font-extrabold text-[#0F172A] font-display leading-tight truncate">
-                              {project.title}
-                            </h3>
-                            <p className="text-[11px] font-medium text-[#475569] truncate">
-                              {project.category}
-                            </p>
-                          </div>
-                          {project.status === 'active' ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedProject(project);
-                                setBuyModalOpen(true);
-                              }}
-                              className="min-h-[40px] px-4 py-1.5 rounded-full bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] text-xs sm:text-sm font-extrabold transition-colors cursor-pointer shrink-0 shadow-2xs"
-                            >
-                              Acheter
-                            </button>
-                          ) : (
-                            <span className="px-3 py-1.5 text-xs font-semibold text-[#475569] shrink-0">
-                              Bientôt disponible
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="space-y-1 text-xs sm:text-sm text-[#334155]">
-                          <p>
-                            Prix:{' '}
-                            <strong className="font-mono-num font-extrabold text-[#0F172A]">
-                              {formatCFA(project.minInvestment)}
-                            </strong>
-                          </p>
-                          <p>
-                            Période de validité:{' '}
-                            <strong className="font-mono-num font-extrabold text-[#0F172A]">
-                              {duration}
-                            </strong>{' '}
-                            jours
-                            {(isActiveOwned || isExpiredOwned) && (
-                              <span className="text-xs text-[#0F766E] font-semibold">
-                                {' '}
-                                · {remainingDays}j restants (
-                                {isExpiredOwned ? 'Expiré' : `Actif ×${ownership.activeCount}`})
-                              </span>
-                            )}
-                          </p>
-                          <p>
-                            Revenu quotidien:{' '}
-                            <strong className="font-mono-num font-extrabold text-[#0F766E]">
-                              {formatCFA(daily)}
-                            </strong>
-                          </p>
-                          <p>
-                            Revenu total:{' '}
-                            <strong className="font-mono-num font-extrabold text-[#0F172A]">
-                              {formatCFA(totalReturn)}
-                            </strong>
-                          </p>
-                        </div>
-                      </div>
+                      {project.status === 'active' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProject(project);
+                            setBuyModalOpen(true);
+                          }}
+                          className="min-h-[40px] w-full aurelia-gold-btn text-xs sm:text-sm font-normal tracking-wide cursor-pointer"
+                        >
+                          ACHETER
+                        </button>
+                      ) : (
+                        <span className="min-h-[40px] flex items-center justify-center text-xs font-normal text-[#6B7280]">
+                          Bientôt disponible
+                        </span>
+                      )}
                     </div>
                   </article>
                 );
@@ -2838,131 +2847,123 @@ export default function App() {
           </main>
         )}
 
-        {/* SUBVIEW: MY ACTIVE PRODUCTS */}
+        {/* SUBVIEW: MES PRODUITS ACTIFS */}
         {activeTab === 'investments' && (
-          <main className="space-y-3.5 sm:space-y-4">
-            <div className="rounded-xl bg-white border border-[#E2E5EC] px-4 py-3 flex items-center justify-between shadow-2xs">
+          <main className="space-y-4">
+            <div className="rounded-xl bg-white border border-[#EAECEF] px-4 py-3 flex items-center justify-between shadow-2xs">
               <button
                 type="button"
-                onClick={() => setActiveTab('account')}
-                className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-[#0F172A] hover:bg-[#F1F5F9] transition-colors cursor-pointer"
+                onClick={() => setActiveTab('projects')}
+                className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-[#111827] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
                 aria-label="Retour"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <h2 className="text-sm sm:text-base font-extrabold text-[#0F172A] font-display">
-                Mon produit
+              <h2 className="text-sm sm:text-base font-medium text-[#111827] font-display">
+                Mes produits
               </h2>
               <div className="w-11" />
             </div>
 
-            <section className="relative h-48 sm:h-56 rounded-2xl overflow-hidden border border-[#CBD5E1] bg-[#0F172A] flex flex-col justify-center">
-              <SafeImage
-                src={BRAND_IMAGES.hero}
-                alt="Mon produit AURELIA MOBILE"
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-[#0F172A]/40 to-black/45" />
-              <div className="relative z-10 flex flex-col items-start gap-3">
-                <div className="w-44 sm:w-52 rounded-r-full bg-white/95 backdrop-blur-xs shadow-md border-y border-r border-[#E2E5EC] py-2.5 px-4 text-center">
-                  <span className="block text-base sm:text-lg font-mono-num font-extrabold text-[#0F172A] leading-tight">
-                    {activeInvestmentsCount}
-                  </span>
-                  <span className="block text-xs text-[#475569] font-medium mt-0.5">
-                    Mon produit
-                  </span>
-                </div>
-                <div className="w-44 sm:w-52 rounded-r-full bg-white/95 backdrop-blur-xs shadow-md border-y border-r border-[#E2E5EC] py-2.5 px-4 text-center">
-                  <span className="block text-base sm:text-lg font-mono-num font-extrabold text-[#0F172A] leading-tight">
-                    {formatCFA(userProfile?.totalEarned || 0)}
-                  </span>
-                  <span className="block text-xs text-[#475569] font-medium mt-0.5">
-                    Mes revenus
-                  </span>
-                </div>
+            <section className="grid grid-cols-2 gap-3.5 max-w-2xl mx-auto">
+              <div className="aurelia-gold-box py-3.5 px-3 text-center">
+                <span className="block text-xl sm:text-2xl font-mono-num font-medium text-[#111827] leading-tight">
+                  {activeInvestmentsCount}
+                </span>
+                <span className="block text-xs sm:text-sm font-normal text-[#111827] mt-1">
+                  Produits actifs
+                </span>
+              </div>
+              <div className="aurelia-gold-box py-3.5 px-3 text-center">
+                <span className="block text-lg sm:text-2xl font-mono-num font-medium text-[#111827] leading-tight">
+                  {formatCFA(userProfile?.totalEarned || 0)}
+                </span>
+                <span className="block text-xs sm:text-sm font-normal text-[#111827] mt-1">
+                  Mes revenus
+                </span>
               </div>
             </section>
 
             {enrichedInvestments.length === 0 ? (
-              <section className="rounded-2xl bg-white border border-[#E2E5EC] py-16 px-6 text-center shadow-2xs space-y-3">
-                <p className="text-xs sm:text-sm font-medium text-[#475569]">
-                  Vous n&apos;avez pas encore de produit.
+              <section className="rounded-2xl bg-white border border-[#EAECEF] py-16 px-6 text-center shadow-2xs space-y-4">
+                <p className="text-sm font-normal text-[#4B5563]">
+                  Vous n&apos;avez pas encore de produit actif.
                 </p>
                 <button
                   type="button"
                   onClick={() => setActiveTab('projects')}
-                  className="min-h-[44px] px-6 rounded-full bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] text-xs font-extrabold cursor-pointer"
+                  className="min-h-[44px] px-7 aurelia-gold-btn text-xs sm:text-sm font-normal cursor-pointer"
                 >
-                  Découvrir la gamme VIP
+                  Découvrir les produits phares
                 </button>
               </section>
             ) : (
-              <section className="space-y-3">
+              <section className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                 {enrichedInvestments.map(({ inv, metrics }) => {
                   const catalogItem =
                     visibleProjects.find((p) => p.id === inv.projectId) || visibleProjects[0];
                   return (
                     <article
                       key={inv.id}
-                      className="rounded-2xl bg-white border border-[#E2E5EC] p-4 shadow-2xs flex items-center gap-3.5 sm:gap-5"
+                      className="rounded-xl bg-white border border-[#EAECEF] p-4 shadow-2xs flex items-center gap-4"
                     >
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-[#F8FAFC] border border-[#E2E5EC] shrink-0">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-[#F8FAFC] border border-[#EAECEF] shrink-0">
                         <SafeImage
                           src={catalogItem?.imageUrl || BRAND_IMAGES.hero}
                           alt={inv.projectTitle}
                           className="w-full h-full object-cover"
                         />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <h3 className="text-base sm:text-lg font-extrabold text-[#0F172A] font-display truncate">
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="text-sm sm:text-base font-medium text-[#111827] truncate">
                             {inv.projectTitle}
                           </h3>
                           <span
-                            className={`text-xs font-extrabold shrink-0 ${
-                              metrics.isExpired ? 'text-[#64748B]' : 'text-[#0F766E]'
+                            className={`text-xs font-medium shrink-0 ${
+                              metrics.isExpired ? 'text-[#6B7280]' : 'text-[#0F766E]'
                             }`}
                           >
                             {metrics.displayStatus}
                           </span>
                         </div>
-                        <div className="space-y-1 text-xs sm:text-sm text-[#334155]">
+                        <div className="space-y-0.5 text-xs sm:text-[13px] text-[#374151] font-normal">
                           <p>
-                            Prix:{' '}
-                            <strong className="font-mono-num font-extrabold text-[#0F172A]">
+                            Prix :{' '}
+                            <span className="font-mono-num font-medium text-[#DC2626]">
                               {formatCFA(inv.amount)}
-                            </strong>
+                            </span>
                           </p>
                           <p>
-                            Revenu quotidien:{' '}
-                            <strong className="font-mono-num font-extrabold text-[#0F766E]">
+                            Revenu quotidien :{' '}
+                            <span className="font-mono-num font-medium text-[#0F766E]">
                               {formatCFA(metrics.dailyIncome)}
-                            </strong>
+                            </span>
                           </p>
                           <p>
-                            Jours restants:{' '}
-                            <strong className="font-mono-num font-extrabold text-[#0F172A]">
+                            Durée restante :{' '}
+                            <span className="font-mono-num text-[#111827]">
                               {metrics.daysRemaining} / {metrics.durationDays} jours
-                            </strong>
+                            </span>
                           </p>
                           <p>
-                            Revenu cumulé:{' '}
-                            <strong className="font-mono-num font-extrabold text-[#0F172A]">
+                            Revenu cumulé :{' '}
+                            <span className="font-mono-num font-medium text-[#111827]">
                               {formatCFA(metrics.totalEarnedSoFar)}
-                            </strong>
+                            </span>
                           </p>
                         </div>
                         {metrics.isExpired && catalogItem && (
-                          <div className="pt-2.5">
+                          <div className="pt-1.5">
                             <button
                               type="button"
                               onClick={() => {
                                 setSelectedProject(catalogItem);
                                 setBuyModalOpen(true);
                               }}
-                              className="min-h-[40px] px-4 py-1.5 rounded-full bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] text-xs font-extrabold cursor-pointer"
+                              className="min-h-[38px] px-4 py-1.5 aurelia-gold-btn text-xs font-normal cursor-pointer"
                             >
-                              Acheter à nouveau (90 jours)
+                              Acheter à nouveau
                             </button>
                           </div>
                         )}
@@ -2975,27 +2976,25 @@ export default function App() {
           </main>
         )}
 
-        {/* TAB 3: TEAM & REFERRALS */}
+        {/* TAB 3: ÉQUIPE */}
         {activeTab === 'team' && (
           <main className="space-y-4">
             {showTeamDetails ? (
               <section className="max-w-lg mx-auto space-y-2.5">
-                <div className="bg-white border border-[#E2E5EC] rounded-xl px-3.5 py-2.5 flex items-center justify-between shadow-2xs">
+                <div className="bg-white border border-[#EAECEF] rounded-xl px-3.5 py-2.5 flex items-center justify-between shadow-2xs">
                   <button
                     type="button"
                     onClick={() => setShowTeamDetails(false)}
-                    className="min-w-[44px] min-h-[44px] -ml-1 flex items-center justify-center text-[#0F172A] hover:text-[#1E293B] transition-colors cursor-pointer"
+                    className="min-w-[44px] min-h-[44px] -ml-1 flex items-center justify-center text-[#111827] hover:bg-[#F3F4F6] rounded-lg transition-colors cursor-pointer"
                     aria-label="Retour à la page Équipe"
                   >
                     <ArrowLeft className="w-5 h-5" />
                   </button>
-                  <h2 className="text-xs sm:text-sm font-bold text-[#0F172A] tracking-tight">
-                    Mon équipe
-                  </h2>
+                  <h2 className="text-sm font-medium text-[#111827]">Détails de l&apos;équipe</h2>
                   <div className="w-11" />
                 </div>
 
-                <div className="bg-white border border-[#E2E5EC] rounded-xl grid grid-cols-3 text-center shadow-2xs overflow-hidden">
+                <div className="bg-white border border-[#EAECEF] rounded-xl grid grid-cols-3 text-center shadow-2xs overflow-hidden">
                   {([1, 2, 3] as const).map((lvl) => {
                     const list = teamByLevel[lvl];
                     const rewardedCount = list.filter(
@@ -3008,24 +3007,24 @@ export default function App() {
                         type="button"
                         onClick={() => setTeamLevelTab(lvl)}
                         className={`relative min-h-[54px] py-2.5 px-2 flex flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer ${
-                          active ? 'text-[#0F172A]' : 'text-[#475569] hover:text-[#0F172A]'
+                          active ? 'text-[#111827]' : 'text-[#6B7280] hover:text-[#111827]'
                         }`}
                       >
-                        <span className="text-xs sm:text-sm font-mono-num font-bold text-[#0F172A]">
+                        <span className="text-xs sm:text-sm font-mono-num font-medium text-[#111827]">
                           {rewardedCount}
                         </span>
-                        <span className="text-[11px] sm:text-xs font-medium text-[#475569]">
-                          Niveau {lvl} ({list.length})
+                        <span className="text-[11px] sm:text-xs font-normal text-[#4B5563]">
+                          LV{lvl} ({list.length})
                         </span>
                         {active && (
-                          <span className="absolute bottom-0 inset-x-0 h-[2px] bg-[#0F172A]" />
+                          <span className="absolute bottom-0 inset-x-0 h-[2px] bg-[#F5B800]" />
                         )}
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="bg-white border border-[#E2E5EC] rounded-xl divide-y divide-[#F1F5F9] shadow-2xs overflow-hidden">
+                <div className="bg-white border border-[#EAECEF] rounded-xl divide-y divide-[#F3F4F6] shadow-2xs overflow-hidden">
                   {teamByLevel[teamLevelTab].map((ref, idx) => {
                     const digits = (ref.referredName || '').replace(/\D/g, '');
                     const masked =
@@ -3040,26 +3039,26 @@ export default function App() {
                         className="px-4 py-3 flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3.5 min-w-0">
-                          <BrandEmblem sizeClass="w-10 h-10" shape="square" />
+                          <BrandEmblem sizeClass="w-10 h-10" shape="circle" />
                           <div className="min-w-0">
-                            <p className="text-xs sm:text-sm font-mono-num font-bold text-[#0F172A] leading-tight truncate">
+                            <p className="text-xs sm:text-sm font-mono-num font-medium text-[#111827] leading-tight truncate">
                               {masked}
                             </p>
-                            <p className="text-[11px] font-mono-num text-[#64748B] mt-0.5 truncate">
+                            <p className="text-[11px] font-mono-num text-[#6B7280] mt-0.5 truncate">
                               {formatDateFr(ref.createdAt) || 'Membre actif'}
                             </p>
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <span className="text-xs font-mono-num font-extrabold text-[#0F172A]">
-                            FCFA {Math.round(ref.commissionEarned || 0).toLocaleString('fr-FR')}
+                          <span className="text-xs font-mono-num font-medium text-[#111827]">
+                            {formatCFA(Math.round(ref.commissionEarned || 0))}
                           </span>
                         </div>
                       </div>
                     );
                   })}
                   <div className="py-4 px-4 text-center">
-                    <p className="text-xs text-[#64748B] font-normal">
+                    <p className="text-xs text-[#6B7280] font-normal">
                       Il ne reste plus de données
                     </p>
                   </div>
@@ -3067,123 +3066,149 @@ export default function App() {
               </section>
             ) : (
               <>
-                <div className="rounded-xl bg-white border border-[#E2E5EC] py-2 px-4 flex items-center justify-center shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() => setShowTeamDetails(true)}
-                    className="min-h-[40px] px-4 text-xs sm:text-sm font-bold text-[#0F172A] hover:text-[#1E293B] transition-colors cursor-pointer"
-                  >
-                    Détails de l&apos;équipe &gt;&gt;
-                  </button>
-                </div>
-
                 {(() => {
                   const code = userProfile?.referralCode || 'AM-INVITE';
                   const link = userProfile
                     ? `${window.location.origin}/?ref=${userProfile.uid}&code=${userProfile.referralCode}`
                     : `${window.location.origin}/?ref=AM-INVITE`;
                   return (
-                    <section className="rounded-2xl overflow-hidden border border-[#CBD5E1] bg-[#0F172A] shadow-xs">
-                      <div className="relative h-52 sm:h-60 w-full">
+                    <section className="rounded-2xl overflow-hidden bg-white border border-[#EAECEF] shadow-2xs">
+                      <div className="relative h-52 sm:h-64 w-full bg-[#111827]">
                         <SafeImage
-                          src={BRAND_IMAGES.titanium}
+                          src={BRAND_IMAGES.hero}
                           alt="Programme Équipe & Parrainage AURELIA MOBILE"
                           className="w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-[#0F172A]/55 to-black/20 flex flex-col justify-end p-4 sm:p-5">
-                          <div className="grid grid-cols-2 gap-3 items-end text-center">
-                            <div className="space-y-1 px-1">
-                              <p className="text-base sm:text-xl font-mono-num font-extrabold text-[#F5C533] tracking-wide truncate">
-                                {code}
-                              </p>
-                              <p className="text-[11px] sm:text-xs font-semibold text-white/95">
-                                Code d&apos;invitation
-                              </p>
-                            </div>
-                            <div className="space-y-1 px-1 min-w-0">
-                              <p className="text-xs sm:text-sm font-mono-num font-bold text-[#F5C533] truncate">
-                                {link}
-                              </p>
-                              <p className="text-[11px] sm:text-xs font-semibold text-white/95">
-                                Lien d&apos;invitation
-                              </p>
-                            </div>
-                          </div>
+                        <div className="absolute inset-0 bg-gradient-to-t from-white via-white/15 to-transparent flex items-end p-5">
+                          <h2 className="text-2xl sm:text-3xl font-normal font-display text-[#F5B800] drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]">
+                            Créez votre équipe
+                          </h2>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 divide-x divide-[#0F172A]/15 bg-[#F5C533] text-[#0F172A]">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard?.writeText(code);
-                            showToast("Code d'invitation copié !");
-                          }}
-                          className="min-h-[44px] font-extrabold text-xs sm:text-sm hover:bg-[#EAB308] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <span>Copie</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard?.writeText(link);
-                            showToast("Lien d'invitation copié !");
-                          }}
-                          className="min-h-[44px] font-extrabold text-xs sm:text-sm hover:bg-[#EAB308] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <span>Copie</span>
-                        </button>
+                      <div className="px-5 pt-2 pb-5 space-y-4 bg-white">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm sm:text-base font-normal text-[#F59E0B]">
+                            Partagez en un clic
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowTeamDetails(true)}
+                            className="min-h-[36px] text-xs sm:text-sm font-normal text-[#DC2626] underline cursor-pointer"
+                          >
+                            Détails de l&apos;équipe &gt;
+                          </button>
+                        </div>
+
+                        <p className="text-xs sm:text-sm text-[#4B5563] font-normal">
+                          Partagez le code d&apos;invitation ou le lien pour inviter vos amis
+                        </p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end pt-1">
+                          <div className="space-y-2">
+                            <p className="text-xs sm:text-sm font-normal text-[#F59E0B]">
+                              Code d&apos;invitation :
+                            </p>
+                            <p className="text-base sm:text-lg font-mono-num font-normal text-[#111827] truncate">
+                              {code}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard?.writeText(code);
+                                showToast("Code d'invitation copié !");
+                              }}
+                              className="min-h-[40px] px-7 rounded-md aurelia-gold-btn text-xs sm:text-sm font-normal cursor-pointer"
+                            >
+                              Copier
+                            </button>
+                          </div>
+
+                          <div className="space-y-2 min-w-0">
+                            <p className="text-xs sm:text-sm font-normal text-[#F59E0B]">
+                              Lien d&apos;invitation :
+                            </p>
+                            <p className="text-xs sm:text-sm font-mono-num font-normal text-[#111827] truncate">
+                              {link}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard?.writeText(link);
+                                showToast("Lien d'invitation copié !");
+                              }}
+                              className="min-h-[40px] px-7 rounded-md aurelia-gold-btn text-xs sm:text-sm font-normal cursor-pointer"
+                            >
+                              Copier
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </section>
                   );
                 })()}
 
-                <section className="px-1">
-                  <div className="rounded-2xl bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#0F172A] text-white py-3 px-5 shadow-xs border border-[#334155] grid grid-cols-2 divide-x divide-white/20 text-center">
-                    <div>
-                      <p className="text-base sm:text-lg font-mono-num font-extrabold text-[#F5C533]">
+                <section className="grid grid-cols-2 gap-3.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowTeamDetails(true)}
+                    className="relative h-28 sm:h-32 rounded-xl overflow-hidden border border-[#EAECEF] bg-[#111827] cursor-pointer text-center"
+                  >
+                    <SafeImage
+                      src={BRAND_IMAGES.titanium}
+                      alt="Total des membres"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/55 flex flex-col items-center justify-center p-2">
+                      <span className="text-xl sm:text-2xl font-mono-num font-medium text-white">
                         {teamByLevel.totalUsers}
-                      </p>
-                      <p className="text-[11px] sm:text-xs text-slate-200 font-medium">
-                        Utilisateurs valides
-                      </p>
+                      </span>
+                      <span className="text-xs sm:text-sm font-normal text-white/95 mt-1">
+                        Total des membres &gt;
+                      </span>
                     </div>
-                    <div>
-                      <p className="text-base sm:text-lg font-mono-num font-extrabold text-[#F5C533]">
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowTeamDetails(true)}
+                    className="relative h-28 sm:h-32 rounded-xl overflow-hidden border border-[#EAECEF] bg-[#111827] cursor-pointer text-center"
+                  >
+                    <SafeImage
+                      src={BRAND_IMAGES.foldable}
+                      alt="Total des récompenses"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/55 flex flex-col items-center justify-center p-2">
+                      <span className="text-lg sm:text-2xl font-mono-num font-medium text-white">
                         {formatCFA(teamByLevel.totalRevenue)}
-                      </p>
-                      <p className="text-[11px] sm:text-xs text-slate-200 font-medium">
-                        Revenus de l&apos;équipe
-                      </p>
+                      </span>
+                      <span className="text-xs sm:text-sm font-normal text-white/95 mt-1">
+                        Total des récompenses &gt;
+                      </span>
                     </div>
-                  </div>
+                  </button>
                 </section>
 
-                <section className="rounded-2xl bg-white border border-[#E2E5EC] divide-y divide-[#F1F5F9] overflow-hidden shadow-2xs">
+                <section className="rounded-2xl bg-white border border-[#EAECEF] divide-y divide-[#F3F4F6] overflow-hidden shadow-2xs">
                   {[
                     {
                       level: 1 as const,
                       rate: '30%',
                       users: teamByLevel[1].length,
                       revenue: teamByLevel.revenue[1],
-                      medalBg: 'bg-[#F5C533] text-[#0F172A] border-[#D4AF37]',
-                      ribbonBg: 'bg-[#0F172A]',
                     },
                     {
                       level: 2 as const,
                       rate: '2%',
                       users: teamByLevel[2].length,
                       revenue: teamByLevel.revenue[2],
-                      medalBg: 'bg-[#E2E8F0] text-[#0F172A] border-[#94A3B8]',
-                      ribbonBg: 'bg-[#334155]',
                     },
                     {
                       level: 3 as const,
                       rate: '1%',
                       users: teamByLevel[3].length,
                       revenue: teamByLevel.revenue[3],
-                      medalBg: 'bg-[#E2D4C0] text-[#451A03] border-[#B48A5A]',
-                      ribbonBg: 'bg-[#64748B]',
                     },
                   ].map((row) => (
                     <button
@@ -3193,60 +3218,50 @@ export default function App() {
                         setTeamLevelTab(row.level);
                         setShowTeamDetails(true);
                       }}
-                      className="w-full p-4 sm:p-5 grid grid-cols-12 items-center text-center gap-2 hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+                      className="w-full px-4 py-4 sm:px-5 grid grid-cols-12 items-center text-center gap-2 hover:bg-[#FAFAFA] transition-colors cursor-pointer"
                     >
-                      <div className="col-span-2 flex flex-col items-center justify-center">
-                        <div className={`w-5 h-2.5 rounded-t-xs ${row.ribbonBg}`} />
-                        <div
-                          className={`w-9 h-9 rounded-full border-2 flex flex-col items-center justify-center shadow-2xs -mt-0.5 ${row.medalBg}`}
-                        >
-                          <Award className="w-3 h-3 opacity-80" />
-                          <span className="text-xs font-mono-num font-extrabold leading-none">
-                            {row.level}
-                          </span>
-                        </div>
+                      <div className="col-span-2 text-left">
+                        <span className="text-lg sm:text-xl font-normal text-[#F59E0B]">
+                          LV{row.level}
+                        </span>
                       </div>
-                      <div className="col-span-4 space-y-0.5">
-                        <p className="text-sm sm:text-base font-mono-num font-extrabold text-[#0F172A]">
+                      <div className="col-span-3 space-y-0.5">
+                        <p className="text-sm sm:text-base font-mono-num font-normal text-[#111827]">
                           {row.rate}
                         </p>
-                        <p className="text-[11px] sm:text-xs text-[#475569]">Taux de commission</p>
+                        <p className="text-[11px] sm:text-xs text-[#6B7280]">Commission</p>
                       </div>
                       <div className="col-span-3 space-y-0.5">
-                        <p className="text-sm sm:text-base font-mono-num font-extrabold text-[#0F172A]">
+                        <p className="text-sm sm:text-base font-mono-num font-normal text-[#111827]">
                           {row.users}
                         </p>
-                        <p className="text-[11px] sm:text-xs text-[#475569]">Utilisateur</p>
+                        <p className="text-[11px] sm:text-xs text-[#6B7280]">Membres</p>
                       </div>
-                      <div className="col-span-3 space-y-0.5">
-                        <p className="text-sm sm:text-base font-mono-num font-extrabold text-[#0F766E]">
-                          {row.revenue}
+                      <div className="col-span-4 space-y-0.5">
+                        <p className="text-sm sm:text-base font-mono-num font-normal text-[#111827]">
+                          {formatCFA(row.revenue)}
                         </p>
-                        <p className="text-[11px] sm:text-xs text-[#475569]">Revenu</p>
+                        <p className="text-[11px] sm:text-xs text-[#6B7280]">Récompense</p>
                       </div>
                     </button>
                   ))}
                 </section>
 
-                <section className="rounded-2xl bg-white border border-[#E2E5EC] p-5 space-y-3.5 text-xs sm:text-sm text-[#334155] leading-relaxed shadow-2xs">
+                <section className="rounded-2xl bg-white border border-[#EAECEF] p-5 space-y-3 text-xs sm:text-sm text-[#4B5563] font-normal leading-relaxed shadow-2xs">
                   <p>
                     Lorsque les amis que vous invitez s&apos;inscrivent et effectuent un
                     investissement, vous recevez instantanément un cashback de{' '}
-                    <strong className="text-[#0F172A]">30 %</strong>.
+                    <span className="font-medium text-[#111827]">30 %</span>.
                   </p>
                   <p>
                     Vous bénéficiez d&apos;un cashback de{' '}
-                    <strong className="text-[#0F172A]">2 %</strong> lorsque les membres de votre
-                    équipe de niveau 2 investissent.
+                    <span className="font-medium text-[#111827]">2 %</span> lorsque les membres de
+                    votre équipe de niveau 2 investissent, et de{' '}
+                    <span className="font-medium text-[#111827]">1 %</span> au niveau 3.
                   </p>
                   <p>
-                    Vous bénéficiez d&apos;un cashback de{' '}
-                    <strong className="text-[#0F172A]">1 %</strong> lorsque les membres de votre
-                    équipe de niveau 3 investissent.
-                  </p>
-                  <p>
-                    Les récompenses en espèces seront créditées sur votre compte une fois que les
-                    membres de votre équipe auront investi. Vous pouvez les retirer immédiatement.
+                    Les récompenses en espèces sont créditées automatiquement et disponibles pour
+                    un retrait immédiat.
                   </p>
                 </section>
               </>
@@ -3254,56 +3269,66 @@ export default function App() {
           </main>
         )}
 
-        {/* TAB 4: ACCOUNT */}
+        {/* TAB 4: MOI (MON COMPTE) */}
         {activeTab === 'account' && (
-          <main className="space-y-5">
+          <main className="space-y-4">
             {accountSubpage === 'menu' && (
-              <div className="space-y-3.5">
-                <div className="rounded-2xl overflow-hidden border border-[#E2E5EC] bg-white shadow-2xs">
-                  <div className="grid grid-cols-12 items-stretch">
-                    <div className="col-span-3 bg-[#F8FAFC] flex items-center justify-center py-4 px-2 border-r border-[#E2E5EC]">
-                      <BrandEmblem sizeClass="w-12 h-12" shape="circle" />
-                    </div>
-                    <div className="col-span-5 bg-[#0F172A] text-white flex flex-col items-center justify-center py-4 px-2.5 text-center border-r border-white/15">
-                      <span className="text-xs sm:text-sm font-mono-num font-extrabold tracking-tight truncate max-w-full">
-                        {userProfile?.withdrawalAccount &&
-                        userProfile.withdrawalAccount.trim().length > 4
-                          ? userProfile.withdrawalAccount
-                          : userProfile?.phone || userProfile?.referralCode || '+226 77409899'}
-                      </span>
-                      <span className="text-[10px] sm:text-xs text-slate-300 truncate max-w-full mt-0.5">
-                        {userProfile?.displayName || 'Membre AURELIA MOBILE'}
-                      </span>
-                    </div>
-                    <div className="col-span-4 bg-[#1E293B] text-white flex flex-col items-center justify-center py-4 px-2 text-center">
-                      <span className="text-xs sm:text-sm font-mono-num font-extrabold text-[#F5C533]">
-                        {formatCFA(userProfile?.balance || 0)}
-                      </span>
-                      <span className="text-[10px] sm:text-xs text-slate-200 mt-0.5">
-                        Solde disponible
-                      </span>
+              <div className="space-y-4">
+                <section className="rounded-2xl bg-white border border-[#EAECEF] px-5 pt-4 pb-2 shadow-2xs">
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="min-h-[36px] text-xs sm:text-sm font-normal text-[#F59E0B] hover:text-[#D97706] transition-colors cursor-pointer"
+                    >
+                      Déconnexion
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-4 mt-1">
+                    <BrandEmblem sizeClass="w-16 h-16" shape="circle" />
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="text-lg sm:text-xl font-mono-num font-normal text-[#111827] truncate">
+                        {userProfile?.phone ||
+                          (userProfile?.withdrawalAccount &&
+                          userProfile.withdrawalAccount.trim().length > 4
+                            ? userProfile.withdrawalAccount
+                            : userProfile?.referralCode || '+226 77409899')}
+                      </p>
+                      <p className="text-sm font-normal text-[#F59E0B]">
+                        {activeInvestmentsCount > 0
+                          ? `VIP actif (×${activeInvestmentsCount})`
+                          : 'Niveau 1'}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 divide-x divide-[#E2E5EC] border-t border-[#E2E5EC] bg-white">
+                  <div className="text-center py-5 space-y-1">
+                    <p className="text-3xl sm:text-4xl font-mono-num font-normal text-[#F5B800] tracking-tight">
+                      {formatCFA(userProfile?.balance || 0)}
+                    </p>
+                    <p className="text-xs sm:text-sm text-[#4B5563] font-normal">Solde</p>
+                  </div>
+
+                  <div className="grid grid-cols-3 text-center pt-1 pb-4 border-b-[1.5px] border-[#111827]">
                     <button
                       type="button"
                       onClick={() => setDepositModalOpen(true)}
-                      className="min-h-[60px] py-3.5 px-2 flex flex-col items-center justify-center gap-1.5 hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+                      className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer hover:opacity-80"
                     >
-                      <CreditCard className="w-5 h-5 text-[#0F172A]" />
-                      <span className="text-[11px] sm:text-xs font-bold text-[#0F172A]">
-                        Recharger
+                      <span className="text-xs sm:text-sm font-normal text-[#111827]">Dépôt</span>
+                      <span className="text-xs sm:text-sm font-normal text-[#F59E0B]">
+                        Aller &gt;
                       </span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setWithdrawModalOpen(true)}
-                      className="min-h-[60px] py-3.5 px-2 flex flex-col items-center justify-center gap-1.5 hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+                      className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer hover:opacity-80"
                     >
-                      <ArrowUpRight className="w-5 h-5 text-[#0F172A]" />
-                      <span className="text-[11px] sm:text-xs font-bold text-[#0F172A]">
-                        Retrait
+                      <span className="text-xs sm:text-sm font-normal text-[#111827]">Retrait</span>
+                      <span className="text-xs sm:text-sm font-normal text-[#F59E0B]">
+                        Aller &gt;
                       </span>
                     </button>
                     <button
@@ -3312,199 +3337,175 @@ export default function App() {
                         setHistoryFilter('all');
                         setAccountSubpage('history');
                       }}
-                      className="min-h-[60px] py-3.5 px-2 flex flex-col items-center justify-center gap-1.5 hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+                      className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer hover:opacity-80"
                     >
-                      <FileText className="w-5 h-5 text-[#0F172A]" />
-                      <span className="text-[11px] sm:text-xs font-bold text-[#0F172A]">
-                        Dossiers de compte
+                      <span className="text-xs sm:text-sm font-normal text-[#111827]">
+                        Historique
+                      </span>
+                      <span className="text-xs sm:text-sm font-normal text-[#F59E0B]">
+                        Voir &gt;
                       </span>
                     </button>
                   </div>
-                </div>
 
-                <div className="relative h-28 sm:h-36 rounded-2xl overflow-hidden border border-[#CBD5E1] bg-[#0F172A]">
-                  <SafeImage
-                    src={BRAND_IMAGES.ceramic}
-                    alt="Univers AURELIA MOBILE"
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#020617]/90 via-[#0F172A]/55 to-black/30 flex flex-col justify-center px-5">
-                    <p className="text-xs font-extrabold uppercase tracking-wider text-[#F5C533]">
-                      AURELIA MOBILE
-                    </p>
-                    <p className="text-sm sm:text-base font-extrabold font-display text-white mt-0.5">
-                      « L&apos;excellence du smartphone, le rendement au quotidien. »
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-[#E2E5EC] divide-y divide-[#F1F5F9] overflow-hidden shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('investments')}
-                    className="w-full min-h-[56px] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-8 h-8 rounded-lg bg-[#F5C533] text-[#0F172A] flex items-center justify-center shrink-0">
-                        <Smartphone className="w-4 h-4 stroke-[2.5]" />
-                      </div>
-                      <span className="text-xs sm:text-sm font-bold text-[#0F172A]">
-                        Mon produit ({activeInvestmentsCount})
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[#475569] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHistoryFilter('all');
-                      setAccountSubpage('history');
-                    }}
-                    className="w-full min-h-[56px] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-[#0F172A] flex items-center justify-center shrink-0">
-                        <History className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm font-bold text-[#0F172A]">
-                        Historique des transactions
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[#475569] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHistoryFilter('withdrawal');
-                      setAccountSubpage('history');
-                    }}
-                    className="w-full min-h-[56px] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-8 h-8 rounded-lg bg-amber-50 text-[#9A6B00] flex items-center justify-center shrink-0">
-                        <Wallet className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm font-bold text-[#0F172A]">
-                        Registres des retraits
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[#475569] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHistoryFilter('deposit');
-                      setAccountSubpage('history');
-                    }}
-                    className="w-full min-h-[56px] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-[#0F172A] flex items-center justify-center shrink-0">
-                        <ArrowDownLeft className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm font-bold text-[#0F172A]">
-                        Historique des recharges
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[#475569] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAccountSubpage('withdrawal_account')}
-                    className="w-full min-h-[56px] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-[#0F172A] flex items-center justify-center shrink-0">
-                        <CreditCard className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm font-bold text-[#0F172A]">
-                        Gestion des comptes de retrait
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[#475569] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPasswordFeedback(null);
-                      setAccountSubpage('password');
-                    }}
-                    className="w-full min-h-[56px] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-[#0F172A] flex items-center justify-center shrink-0">
-                        <KeyRound className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm font-bold text-[#0F172A]">
-                        Modifier le mot de passe
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[#475569] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAccountSubpage('about')}
-                    className="w-full min-h-[56px] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-[#0F172A] flex items-center justify-center shrink-0">
-                        <Info className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm font-bold text-[#0F172A]">
-                        À propos de l&apos;application
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[#475569] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAccountSubpage('support')}
-                    className="w-full min-h-[56px] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-[#0F172A] flex items-center justify-center shrink-0">
-                        <Headphones className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm font-bold text-[#0F172A]">
-                        Service client
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[#475569] shrink-0" />
-                  </button>
-
-                  {isAdmin && (
+                  <div className="divide-y divide-[#F3F4F6]">
                     <button
                       type="button"
-                      onClick={() => setActiveTab('admin')}
-                      className="w-full min-h-[56px] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors text-left cursor-pointer"
+                      onClick={() => setAccountSubpage('about')}
+                      className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
                     >
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-8 h-8 rounded-lg bg-[#0F172A] text-[#F5C533] flex items-center justify-center shrink-0">
-                          <Shield className="w-4 h-4" />
-                        </div>
-                        <span className="text-xs sm:text-sm font-extrabold text-[#0F172A]">
-                          Espace Administrateur
+                      <div className="flex items-center gap-4">
+                        <Info className="w-6 h-6 text-[#F5B800] shrink-0" />
+                        <span className="text-sm font-normal text-[#1F2937]">
+                          À propos de nous
                         </span>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-[#0F172A] shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
                     </button>
-                  )}
-                </div>
 
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="w-full min-h-[48px] rounded-xl bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] font-extrabold text-sm shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>Se déconnecter</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('investments')}
+                      className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <Smartphone className="w-6 h-6 text-[#F5B800] shrink-0" />
+                        <span className="text-sm font-normal text-[#1F2937]">
+                          Mes produits ({activeInvestmentsCount})
+                        </span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHistoryFilter('all');
+                        setAccountSubpage('history');
+                      }}
+                      className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <History className="w-6 h-6 text-[#F5B800] shrink-0" />
+                        <span className="text-sm font-normal text-[#1F2937]">Historique</span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAccountSubpage('support')}
+                      className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <Headphones className="w-6 h-6 text-[#F5B800] shrink-0" />
+                        <span className="text-sm font-normal text-[#1F2937]">Service client</span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHistoryFilter('withdrawal');
+                        setAccountSubpage('history');
+                      }}
+                      className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <Wallet className="w-6 h-6 text-[#F5B800] shrink-0" />
+                        <span className="text-sm font-normal text-[#1F2937]">
+                          Registres des retraits
+                        </span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAccountSubpage('withdrawal_account')}
+                      className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <CreditCard className="w-6 h-6 text-[#F5B800] shrink-0" />
+                        <span className="text-sm font-normal text-[#1F2937]">
+                          Gestion des comptes de retrait
+                        </span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPasswordFeedback(null);
+                        setAccountSubpage('password');
+                      }}
+                      className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <KeyRound className="w-6 h-6 text-[#F5B800] shrink-0" />
+                        <span className="text-sm font-normal text-[#1F2937]">
+                          Modifier le mot de passe
+                        </span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setReferralModalOpen(true)}
+                      className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <Award className="w-6 h-6 text-[#F5B800] shrink-0" />
+                        <span className="text-sm font-normal text-[#1F2937]">
+                          Inviter des amis
+                        </span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                    </button>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('admin')}
+                        className="w-full min-h-[54px] py-3 flex items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-4">
+                          <Shield className="w-6 h-6 text-[#111827] shrink-0" />
+                          <span className="text-sm font-medium text-[#111827]">
+                            Espace Administrateur
+                          </span>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[#111827] shrink-0" />
+                      </button>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-2xl bg-white border border-[#EAECEF] p-4 sm:p-5 shadow-2xs flex items-center gap-4">
+                  <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#F8FAFC] border border-[#EAECEF] shrink-0">
+                    <SafeImage
+                      src={BRAND_IMAGES.brandShowcase}
+                      alt="Gamme Smartphones VIP AURELIA MOBILE"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <h3 className="text-base font-normal text-[#F59E0B]">Gamme Smartphones VIP</h3>
+                    <p className="text-xs sm:text-sm text-[#4B5563] font-normal leading-relaxed">
+                      Activez un smartphone AURELIA MOBILE et percevez vos revenus quotidiens.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('projects')}
+                      className="min-h-[40px] px-6 aurelia-gold-btn text-xs sm:text-sm font-normal cursor-pointer"
+                    >
+                      C&apos;EST PARTI &gt;
+                    </button>
+                  </div>
+                </section>
               </div>
             )}
 
@@ -4042,14 +4043,14 @@ export default function App() {
       {/* Bottom Sticky Navigation Bar */}
       <nav
         aria-label="Navigation principale"
-        className="fixed bottom-0 inset-x-0 z-40 bg-[#0B1120] text-white border-t border-[#1E293B]"
+        className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-[#EAECEF] shadow-[0_-2px_10px_rgba(0,0,0,0.04)]"
       >
         <div className="max-w-5xl mx-auto px-2 h-16 grid grid-cols-4 items-center">
           {[
             { id: 'home' as const, label: 'Accueil', icon: Home },
-            { id: 'projects' as const, label: 'Produits', icon: Smartphone },
+            { id: 'projects' as const, label: 'Produit', icon: Smartphone },
             { id: 'team' as const, label: 'Équipe', icon: Users },
-            { id: 'account' as const, label: 'Mon compte', icon: User },
+            { id: 'account' as const, label: 'Moi', icon: User },
           ].map((item) => {
             const Icon = item.icon;
             const active =
@@ -4066,16 +4067,24 @@ export default function App() {
                   if (item.id === 'team') setShowTeamDetails(false);
                 }}
                 className={`relative h-full flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
-                  active ? 'text-[#F5C533]' : 'text-slate-300 hover:text-white'
+                  active ? 'text-[#D97706]' : 'text-[#9CA3AF] hover:text-[#F59E0B]'
                 }`}
               >
-                <Icon className="w-5 h-5" />
-                <span className="text-xs font-bold tracking-tight truncate max-w-[90%]">
+                {active && (
+                  <span className="absolute top-0 inset-x-6 h-[2.5px] rounded-b-full bg-[#F5B800]" />
+                )}
+                <Icon
+                  className={`w-5 h-5 ${
+                    active ? 'text-[#F5B800] stroke-[2.2]' : 'text-[#F5B800]/75 stroke-[1.75]'
+                  }`}
+                />
+                <span
+                  className={`text-xs tracking-tight truncate max-w-[90%] ${
+                    active ? 'font-medium text-[#D97706]' : 'font-normal text-[#6B7280]'
+                  }`}
+                >
                   {item.label}
                 </span>
-                {active && (
-                  <span className="absolute bottom-0 inset-x-6 h-1 rounded-t-full bg-[#F5C533]" />
-                )}
               </button>
             );
           })}

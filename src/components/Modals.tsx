@@ -1146,12 +1146,12 @@ export function InfoWelcomeModal({
           </p>
         </div>
 
-        <div className="px-5 py-4 bg-[#F8FAFC] border-t border-[#E2E5EC] grid grid-cols-2 gap-2.5 shrink-0">
+        <div className="px-5 py-4 bg-[#F8FAFC] border-t border-[#EAECEF] grid grid-cols-2 gap-3 shrink-0">
           <a
             href={TELEGRAM_GROUP_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="min-h-[46px] px-3 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-[#F5C533] font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors"
+            className="min-h-[46px] px-3 py-2 rounded-lg bg-[#111827] hover:bg-[#1F2937] text-[#F5B800] font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors"
           >
             <Send className="w-3.5 h-3.5 shrink-0" />
             <span>Aller sur Telegram &gt;</span>
@@ -1159,7 +1159,7 @@ export function InfoWelcomeModal({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[46px] px-4 py-2 rounded-xl bg-[#F5C533] hover:bg-[#EAB308] text-[#0F172A] font-extrabold text-xs sm:text-sm flex items-center justify-center whitespace-nowrap transition-colors cursor-pointer"
+            className="min-h-[46px] px-4 py-2 rounded-md aurelia-gold-btn font-medium text-xs sm:text-sm flex items-center justify-center whitespace-nowrap cursor-pointer"
           >
             D&apos;ACCORD
           </button>
