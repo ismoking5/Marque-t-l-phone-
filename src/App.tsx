@@ -21,6 +21,7 @@ import {
   Send,
   Shield,
   Smartphone,
+  Trophy,
   User,
   Users,
   Wallet,
@@ -3168,17 +3169,17 @@ export default function App() {
 
             <section
               aria-label="Actions rapides"
-              className="grid grid-cols-4 gap-2 py-1"
+              className="grid grid-cols-5 gap-1.5 sm:gap-2 py-1"
             >
               <button
                 type="button"
                 onClick={() => setDepositModalOpen(true)}
                 className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
               >
-                <div className="w-11 h-11 rounded-full bg-[#F5B800] text-white flex items-center justify-center shadow-2xs">
-                  <CircleDollarSign className="w-6 h-6 stroke-[2]" />
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#F5B800] text-white flex items-center justify-center shadow-2xs">
+                  <CircleDollarSign className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />
                 </div>
-                <span className="text-xs sm:text-sm font-normal text-[#D97706] text-center leading-tight">
+                <span className="text-[11px] sm:text-sm font-normal text-[#D97706] text-center leading-tight">
                   Dépôt
                 </span>
               </button>
@@ -3188,10 +3189,10 @@ export default function App() {
                 onClick={() => setWithdrawModalOpen(true)}
                 className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
               >
-                <div className="w-11 h-11 rounded-xl bg-[#F5B800] text-white flex items-center justify-center shadow-2xs">
-                  <CreditCard className="w-6 h-6 stroke-[2]" />
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#F5B800] text-white flex items-center justify-center shadow-2xs">
+                  <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />
                 </div>
-                <span className="text-xs sm:text-sm font-normal text-[#D97706] text-center leading-tight">
+                <span className="text-[11px] sm:text-sm font-normal text-[#D97706] text-center leading-tight">
                   Retrait
                 </span>
               </button>
@@ -3201,10 +3202,10 @@ export default function App() {
                 onClick={() => setSupportModalOpen(true)}
                 className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
               >
-                <div className="w-11 h-11 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-[#F5B800] flex items-center justify-center shadow-2xs">
-                  <Headphones className="w-6 h-6 stroke-[2]" />
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-[#F5B800] flex items-center justify-center shadow-2xs">
+                  <Headphones className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />
                 </div>
-                <span className="text-xs sm:text-sm font-normal text-[#D97706] text-center leading-tight">
+                <span className="text-[11px] sm:text-sm font-normal text-[#D97706] text-center leading-tight">
                   Aide
                 </span>
               </button>
@@ -3214,11 +3215,55 @@ export default function App() {
                 onClick={() => setActiveTab('checkin')}
                 className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
               >
-                <div className="w-11 h-11 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-[#F5B800] flex items-center justify-center shadow-2xs">
-                  <CalendarCheck className="w-6 h-6 stroke-[2]" />
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-[#F5B800] flex items-center justify-center shadow-2xs">
+                  <CalendarCheck className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />
                 </div>
-                <span className="text-xs sm:text-sm font-normal text-[#D97706] text-center leading-tight">
+                <span className="text-[11px] sm:text-sm font-normal text-[#D97706] text-center leading-tight">
                   Pointage
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('missions')}
+                className="min-h-[72px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:bg-white transition-colors cursor-pointer"
+              >
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-[#F5B800] flex items-center justify-center shadow-2xs">
+                  <Trophy className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />
+                </div>
+                <span className="text-[11px] sm:text-sm font-normal text-[#D97706] text-center leading-tight">
+                  Missions
+                </span>
+              </button>
+            </section>
+
+            {/* Bouton Centre des missions avec image professionnelle (visible immédiatement) */}
+            <section aria-label="Centre des missions">
+              <button
+                type="button"
+                onClick={() => setActiveTab('missions')}
+                className="w-full rounded-2xl bg-white border border-[#EAECEF] p-3.5 sm:p-4 shadow-2xs hover:border-[#F5B800] transition-colors flex items-center gap-3.5 sm:gap-5 text-left cursor-pointer group"
+              >
+                <div className="w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden bg-[#111827] border border-[#EAECEF] shrink-0">
+                  <SafeImage
+                    src={BRAND_IMAGES.missionsCenter}
+                    alt="Centre des missions AURELIA MOBILE"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                </div>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#D97706]">
+                    Récompenses jusqu&apos;à 15 000 F CFA
+                  </p>
+                  <h2 className="text-base sm:text-lg font-medium text-[#111827] leading-snug">
+                    Centre des missions
+                  </h2>
+                  <p className="text-xs text-[#6B7280] line-clamp-1">
+                    Parrainez des investisseurs niveau 1 et réclamez vos bonus.
+                  </p>
+                </div>
+                <span className="min-h-[40px] px-4 aurelia-gold-btn text-xs sm:text-sm font-medium flex items-center justify-center shrink-0">
+                  ALLER &gt;
                 </span>
               </button>
             </section>
@@ -3270,37 +3315,6 @@ export default function App() {
                   </p>
                 </div>
               </div>
-            </section>
-
-            {/* Bouton Centre des missions avec image professionnelle */}
-            <section aria-label="Centre des missions">
-              <button
-                type="button"
-                onClick={() => setActiveTab('missions')}
-                className="w-full rounded-2xl bg-white border border-[#EAECEF] p-3.5 sm:p-4 shadow-2xs hover:border-[#F5B800] transition-colors flex items-center gap-3.5 sm:gap-5 text-left cursor-pointer group"
-              >
-                <div className="w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden bg-[#111827] border border-[#EAECEF] shrink-0">
-                  <SafeImage
-                    src={BRAND_IMAGES.missionsCenter}
-                    alt="Centre des missions AURELIA MOBILE"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                </div>
-                <div className="flex-1 min-w-0 space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#D97706]">
-                    Récompenses jusqu&apos;à 15 000 F CFA
-                  </p>
-                  <h2 className="text-base sm:text-lg font-medium text-[#111827] leading-snug">
-                    Centre des missions
-                  </h2>
-                  <p className="text-xs text-[#6B7280] line-clamp-1">
-                    Parrainez des investisseurs niveau 1 et réclamez vos bonus.
-                  </p>
-                </div>
-                <span className="min-h-[40px] px-4 aurelia-gold-btn text-xs sm:text-sm font-medium flex items-center justify-center shrink-0">
-                  ALLER &gt;
-                </span>
-              </button>
             </section>
           </main>
         )}
@@ -4329,21 +4343,21 @@ export default function App() {
                 </section>
 
                 <section className="rounded-2xl bg-white border border-[#EAECEF] p-4 sm:p-5 shadow-2xs flex items-center gap-4">
-                  <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#F8FAFC] border border-[#EAECEF] shrink-0">
+                  <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#111827] border border-[#EAECEF] shrink-0">
                     <SafeImage
-                      src={BRAND_IMAGES.brandShowcase}
-                      alt="Gamme Smartphones VIP AURELIA MOBILE"
+                      src={BRAND_IMAGES.missionsCenter}
+                      alt="Centre des missions AURELIA MOBILE"
                       className="w-full h-full object-cover"
                     />
                   </div>
                   <div className="flex-1 min-w-0 space-y-2">
-                    <h3 className="text-base font-normal text-[#F59E0B]">Gamme Smartphones VIP</h3>
+                    <h3 className="text-base font-normal text-[#F59E0B]">Centre des missions</h3>
                     <p className="text-xs sm:text-sm text-[#4B5563] font-normal leading-relaxed">
-                      Activez un smartphone AURELIA MOBILE et percevez vos revenus quotidiens.
+                      Accomplissez des missions et obtenez de généreuses récompenses.
                     </p>
                     <button
                       type="button"
-                      onClick={() => setActiveTab('projects')}
+                      onClick={() => setActiveTab('missions')}
                       className="min-h-[40px] px-6 aurelia-gold-btn text-xs sm:text-sm font-normal cursor-pointer"
                     >
                       C&apos;EST PARTI &gt;
