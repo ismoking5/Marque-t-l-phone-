@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import process from 'node:process';
 
-const ALLOWED_DIAL_PREFIXES = ['229', '237', '226', '221', '228'];
+const ALLOWED_DIAL_PREFIXES = ['225', '229', '237', '226', '221', '228'];
 const ADMIN_EMAIL = 'ismailasawadogo10@gmail.com';
 const ALLOWED_PAYMENT_HOSTS = new Set([
   'pay.moneyfusion.net',
@@ -120,7 +120,8 @@ async function verifyCallerAuth(
       return {
         ok: false,
         status: 403,
-        message: 'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.',
+        message:
+          "Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, la Côte d'Ivoire, le Sénégal et le Togo sont autorisés.",
       };
     }
 

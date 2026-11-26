@@ -350,7 +350,15 @@ export function WithdrawModal({
   const countryMatch = COUNTRY_OPTIONS.find((c) => c.country === userProfile?.withdrawalCountry);
   const availableMethods = countryMatch
     ? countryMatch.methods
-    : ['Orange Money Burkina', 'Moov Money Burkina', 'Wave', 'MTN MoMo', 'TMoney / Flooz'];
+    : [
+        "Orange Money Côte d'Ivoire",
+        "MTN MoMo Côte d'Ivoire",
+        'Orange Money Burkina',
+        'Moov Money',
+        'Wave',
+        'MTN MoMo',
+        'TMoney / Flooz',
+      ];
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

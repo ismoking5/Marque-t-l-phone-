@@ -11,6 +11,7 @@ import {
   Gift,
   Layers,
   Mail,
+  Minus,
   Phone,
   Plus,
   RefreshCw,
@@ -112,10 +113,12 @@ export function AdminPanel({
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // Credit form state
+  // Credit / subtract balance modal state
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  const [creditAmount, setCreditAmount] = useState(5000);
+  const [creditOperation, setCreditOperation] = useState<'credit' | 'debit'>('credit');
+  const [creditAmount, setCreditAmount] = useState('5000');
   const [creditReason, setCreditReason] = useState('Crédit ajouté par administration');
+  const [creditError, setCreditError] = useState<string | null>(null);
 
   // Gift product modal state
   const [giftModalOpen, setGiftModalOpen] = useState(false);
@@ -227,6 +230,18 @@ export function AdminPanel({
     };
   }, [detailUser, detailTxFilter, investments, transactions, referrals, users]);
 
+  const openCreditModal = (user: UserProfile, op: 'credit' | 'debit' = 'credit') => {
+    setSelectedUser(user);
+    setCreditOperation(op);
+    setCreditAmount('5000');
+    setCreditReason(
+      op === 'debit'
+        ? 'Ajustement / retrait par administration'
+        : 'Crédit ajouté par administration'
+    );
+    setCreditError(null);
+  };
+
   const openGiftModal = (opts?: { user?: UserProfile | null; project?: ProjectItem | null }) => {
     if (users.length === 0) {
       notify('Aucun utilisateur inscrit pour le moment.');
@@ -283,6 +298,8 @@ export function AdminPanel({
       );
       setEditingProject(null);
       notify(isNewProject ? 'Nouveau modèle enregistré.' : 'Modèle mis à jour.');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Impossible d'enregistrer ce produit.");
     } finally {
       setSaving(false);
     }
@@ -293,6 +310,20 @@ export function AdminPanel({
     try {
       await onResetOfficialVipCatalog();
       notify('Catalogue VIP 1 à VIP 5 synchronisé.');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Erreur lors de la synchronisation du catalogue.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleProcessTx = async (tx: TransactionItem, nextStatus: 'approved' | 'rejected') => {
+    setSaving(true);
+    try {
+      await onProcessTransaction(tx, nextStatus);
+      notify(nextStatus === 'approved' ? 'Transaction approuvée.' : 'Transaction rejetée.');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Erreur lors du traitement de la transaction.');
     } finally {
       setSaving(false);
     }
@@ -316,12 +347,26 @@ export function AdminPanel({
 
   const handleCreditSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedUser || creditAmount === 0) return;
+    if (!selectedUser) return;
+    setCreditError(null);
+    const parsedAmt = Math.round(Number(creditAmount) || 0);
+    if (!Number.isFinite(parsedAmt) || parsedAmt <= 0) {
+      setCreditError('Veuillez saisir un montant strictement supérieur à 0 F CFA.');
+      return;
+    }
+    const signedDelta = creditOperation === 'debit' ? -parsedAmt : parsedAmt;
     setSaving(true);
     try {
-      await onAdjustUserBalance(selectedUser, creditAmount, creditReason);
-      notify(`Solde de ${selectedUser.displayName} mis à jour.`);
+      await onAdjustUserBalance(selectedUser, signedDelta, creditReason);
+      notify(
+        `${creditOperation === 'debit' ? '-' : '+'}${formatCFA(parsedAmt)} appliqué à ${selectedUser.displayName}.`
+      );
       setSelectedUser(null);
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : 'Impossible de modifier le solde de cet utilisateur.';
+      setCreditError(msg);
+      notify(msg);
     } finally {
       setSaving(false);
     }
@@ -339,6 +384,8 @@ export function AdminPanel({
         `${giftQuantity > 1 ? `${giftQuantity}x ` : ''}${targetProject.title} offert à ${targetUser.displayName}.`
       );
       setGiftModalOpen(false);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Impossible d'offrir le produit.");
     } finally {
       setSaving(false);
     }
@@ -796,16 +843,18 @@ export function AdminPanel({
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => onProcessTransaction(tx, 'approved')}
-                          className="min-h-[40px] px-3 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          disabled={saving}
+                          onClick={() => void handleProcessTx(tx, 'approved')}
+                          className="min-h-[40px] px-3 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-60"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5 text-[#F5C533]" />
                           Approuver
                         </button>
                         <button
                           type="button"
-                          onClick={() => onProcessTransaction(tx, 'rejected')}
-                          className="min-h-[40px] px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          disabled={saving}
+                          onClick={() => void handleProcessTx(tx, 'rejected')}
+                          className="min-h-[40px] px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-60"
                         >
                           <XCircle className="w-3.5 h-3.5" />
                           Rejeter
@@ -1015,60 +1064,6 @@ export function AdminPanel({
             </div>
           )}
 
-          {selectedUser && (
-            <form
-              onSubmit={handleCreditSubmit}
-              className="p-5 rounded-3xl bg-white border border-[#0F172A] shadow-sm space-y-3"
-            >
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-extrabold text-[#0F172A]">
-                  Créditer / Ajuster : {selectedUser.displayName}
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => setSelectedUser(null)}
-                  className="text-xs font-bold text-[#475569] cursor-pointer min-h-[36px]"
-                >
-                  Fermer
-                </button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#334155] mb-1">
-                    Montant (F CFA)
-                  </label>
-                  <input
-                    type="number"
-                    step={500}
-                    value={creditAmount}
-                    onChange={(e) => setCreditAmount(Number(e.target.value))}
-                    className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs font-mono-num font-bold"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#334155] mb-1">
-                    Libellé / Motif
-                  </label>
-                  <input
-                    type="text"
-                    value={creditReason}
-                    onChange={(e) => setCreditReason(e.target.value)}
-                    className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs"
-                    required
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={saving}
-                className="min-h-[44px] px-5 rounded-xl bg-[#0F172A] text-white text-xs font-bold cursor-pointer"
-              >
-                {saving ? 'Application...' : 'Confirmer le crédit / ajustement'}
-              </button>
-            </form>
-          )}
-
           {filteredUsers.length === 0 ? (
             <div className="p-8 rounded-2xl bg-white border border-[#E2E5EC] text-center text-xs text-[#475569]">
               Aucun compte utilisateur trouvé pour cette recherche.
@@ -1132,11 +1127,11 @@ export function AdminPanel({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setSelectedUser(u)}
+                        onClick={() => openCreditModal(u, 'credit')}
                         className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F3F4F6] hover:bg-[#E2E5EC] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                       >
                         <Wallet className="w-3.5 h-3.5 text-[#0F172A]" />
-                        Créditer
+                        Créditer / Soustraire
                       </button>
                     </div>
                   </div>
@@ -1364,14 +1359,14 @@ export function AdminPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedUser(detailUser);
-                    setActiveTab('users');
+                    const target = detailUser;
                     setDetailUserUid(null);
+                    openCreditModal(target, 'credit');
                   }}
                   className="min-h-[42px] px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                 >
                   <Wallet className="w-4 h-4 text-[#F5C533]" />
-                  Créditer / Ajuster le solde
+                  Créditer / Soustraire le solde
                 </button>
               </div>
 
@@ -1882,6 +1877,182 @@ export function AdminPanel({
                 >
                   <Gift className="w-4 h-4" />
                   {saving ? 'Attribution...' : "Confirmer l'offre du produit"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: CREDIT OR SUBTRACT USER BALANCE */}
+      {selectedUser && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Modifier le solde de ${selectedUser.displayName}`}
+        >
+          <form
+            onSubmit={handleCreditSubmit}
+            className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-[#CBD5E1] shadow-2xl overflow-hidden"
+          >
+            <div className="bg-[#0F172A] text-white px-5 py-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-[#F5C533] text-[#0F172A] flex items-center justify-center shrink-0">
+                  <Wallet className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-extrabold font-display truncate">
+                    Créditer ou soustraire
+                  </h3>
+                  <p className="text-[11px] text-slate-300 truncate">
+                    {selectedUser.displayName} · {selectedUser.phone || selectedUser.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedUser(null)}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer shrink-0"
+                aria-label="Fermer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {creditError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{creditError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreditOperation('credit');
+                    if (creditReason === 'Ajustement / retrait par administration') {
+                      setCreditReason('Crédit ajouté par administration');
+                    }
+                    setCreditError(null);
+                  }}
+                  className={`min-h-[44px] px-3 rounded-xl border text-xs font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                    creditOperation === 'credit'
+                      ? 'bg-[#0F766E] border-[#0F766E] text-white'
+                      : 'bg-[#F8FAFC] border-[#CBD5E1] text-[#0F172A]'
+                  }`}
+                >
+                  <Plus className="w-4 h-4" />
+                  Créditer (+)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreditOperation('debit');
+                    if (creditReason === 'Crédit ajouté par administration') {
+                      setCreditReason('Ajustement / retrait par administration');
+                    }
+                    setCreditError(null);
+                  }}
+                  className={`min-h-[44px] px-3 rounded-xl border text-xs font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                    creditOperation === 'debit'
+                      ? 'bg-red-600 border-red-600 text-white'
+                      : 'bg-[#F8FAFC] border-[#CBD5E1] text-[#0F172A]'
+                  }`}
+                >
+                  <Minus className="w-4 h-4" />
+                  Soustraire (-)
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                  Montant (F CFA)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={creditAmount}
+                  onChange={(e) => setCreditAmount(e.target.value)}
+                  placeholder="Ex : 5000"
+                  className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-sm font-mono-num font-bold text-[#0F172A]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                  Libellé / Motif
+                </label>
+                <input
+                  type="text"
+                  value={creditReason}
+                  onChange={(e) => setCreditReason(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-[#CBD5E1] text-xs text-[#0F172A]"
+                  required
+                />
+              </div>
+
+              {(() => {
+                const parsedAmt = Math.max(0, Math.round(Number(creditAmount) || 0));
+                const signed = creditOperation === 'debit' ? -parsedAmt : parsedAmt;
+                const estimatedNext = Math.max(0, Math.round(selectedUser.balance + signed));
+                return (
+                  <div className="p-3.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E5EC] text-xs space-y-1">
+                    <div className="flex items-center justify-between text-[#475569]">
+                      <span>Solde actuel</span>
+                      <span className="font-mono-num font-bold text-[#0F172A]">
+                        {formatCFA(selectedUser.balance)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[#475569]">
+                      <span>Opération</span>
+                      <span
+                        className={`font-mono-num font-extrabold ${
+                          creditOperation === 'debit' ? 'text-red-600' : 'text-[#0F766E]'
+                        }`}
+                      >
+                        {creditOperation === 'debit' ? '-' : '+'}
+                        {formatCFA(parsedAmt)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-[#E2E5EC]">
+                      <span className="font-bold text-[#0F172A]">Nouveau solde estimé</span>
+                      <span className="font-mono-num font-extrabold text-[#0F172A]">
+                        {formatCFA(estimatedNext)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedUser(null)}
+                  className="min-h-[44px] px-4 rounded-xl bg-[#F3F4F6] hover:bg-[#E2E5EC] text-[#0F172A] text-xs font-bold cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className={`flex-1 min-h-[44px] px-5 rounded-xl text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 ${
+                    creditOperation === 'debit'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-[#0F172A] hover:bg-[#1E293B]'
+                  }`}
+                >
+                  <Wallet className="w-4 h-4 text-[#F5C533]" />
+                  {saving
+                    ? 'Application...'
+                    : creditOperation === 'debit'
+                    ? 'Confirmer la soustraction'
+                    : 'Confirmer le crédit'}
                 </button>
               </div>
             </div>

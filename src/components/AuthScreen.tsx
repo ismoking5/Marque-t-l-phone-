@@ -77,7 +77,7 @@ export function AuthScreen({
     const activeCountry = mode === 'login' ? loginCountry : registerCountry;
     if (!activeCountry || !isEligibleCountry(activeCountry.country, activeCountry.dialCode)) {
       setErrorMsg(
-        'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
+        "Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, la Côte d'Ivoire, le Sénégal et le Togo sont autorisés."
       );
       return;
     }

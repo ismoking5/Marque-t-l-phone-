@@ -72,7 +72,7 @@ export function isEligibleAuthEmail(email?: string | null): boolean {
   const lower = email.trim().toLowerCase();
   if (lower === ADMIN_EMAIL.toLowerCase()) return true;
   const localPart = lower.split('@')[0] || '';
-  return ['229', '237', '226', '221', '228'].some((prefix) => localPart.startsWith(prefix));
+  return ['225', '229', '237', '226', '221', '228'].some((prefix) => localPart.startsWith(prefix));
 }
 
 function mapProfileRow(row: Record<string, unknown>): UserProfile {
@@ -240,7 +240,7 @@ export async function sbEnsureProfileForAuthUser(
     if (!isEligibleAuthEmail(email)) {
       await supabase.auth.signOut();
       throw new Error(
-        'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
+        "Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, la Côte d'Ivoire, le Sénégal et le Togo sont autorisés."
       );
     }
 
@@ -399,7 +399,7 @@ export async function sbPhoneAuth(payload: PhoneAuthPayload): Promise<UserProfil
   const dialCode = payload.dialCode.trim();
   if (!isEligibleCountry(payload.country, dialCode)) {
     throw new Error(
-      'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
+      "Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, la Côte d'Ivoire, le Sénégal et le Togo sont autorisés."
     );
   }
   const phoneCheck = validateEligiblePhone(dialCode, payload.phone, payload.country);

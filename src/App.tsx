@@ -385,10 +385,17 @@ export default function App() {
     }
   }, [activeTab, isAdmin]);
 
-  const refreshSupabaseState = async (activeProfile?: UserProfile | null, email?: string | null) => {
+  const refreshSupabaseState = async (
+    activeProfile?: UserProfile | null,
+    email?: string | null,
+    force = false
+  ) => {
     if (!isSupabaseConfigured || !supabase) return;
     if (refreshSupabaseInflightRef.current) {
-      return refreshSupabaseInflightRef.current;
+      if (!force) {
+        return refreshSupabaseInflightRef.current;
+      }
+      await refreshSupabaseInflightRef.current.catch(() => undefined);
     }
 
     const task = (async () => {
@@ -1004,7 +1011,7 @@ export default function App() {
   const handlePhoneAuth = async (payload: PhoneAuthPayload) => {
     if (!isEligibleCountry(payload.country, payload.dialCode)) {
       throw new Error(
-        'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.'
+        "Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, la Côte d'Ivoire, le Sénégal et le Togo sont autorisés."
       );
     }
     const phoneCheck = validateEligiblePhone(payload.dialCode, payload.phone, payload.country);
@@ -1321,7 +1328,7 @@ export default function App() {
     if (!userProfile) throw new Error('Veuillez vous connecter pour confirmer votre recharge.');
     if (isSupabaseConfigured && supabase) {
       const createdTxId = await sbCreateDeposit(amount, method, phoneOrAccount);
-      await refreshSupabaseState(userProfile, sbUser?.email);
+      await refreshSupabaseState(userProfile, sbUser?.email, true);
       const gateway = await initiateGatewayCheckout({
         amount,
         method,
@@ -1424,7 +1431,7 @@ export default function App() {
           sessionData.session.user.email || userProfile.email
         );
         setUserProfile(updatedProf);
-        await refreshSupabaseState(updatedProf, sessionData.session.user.email);
+        await refreshSupabaseState(updatedProf, sessionData.session.user.email, true);
       }
       showToast(`Demande de retrait de ${formatCFA(amount)} enregistrée.`);
       return;
@@ -1502,7 +1509,7 @@ export default function App() {
           sessionData.session.user.email || userProfile.email
         );
         setUserProfile(updatedProf);
-        await refreshSupabaseState(updatedProf, sessionData.session.user.email);
+        await refreshSupabaseState(updatedProf, sessionData.session.user.email, true);
       }
       showToast(
         `${qty > 1 ? `${qty}x ` : ''}${project.title} activé (${formatCFA(unitDaily * qty)}/jour pendant ${durationDays}j).`
@@ -1908,7 +1915,7 @@ export default function App() {
 
     if (isSupabaseConfigured && supabase) {
       await sbAdminSaveProject(cleaned);
-      await refreshSupabaseState(userProfile, sbUser?.email);
+      await refreshSupabaseState(userProfile, sbUser?.email, true);
       return;
     }
 
@@ -1931,7 +1938,7 @@ export default function App() {
     saveLocalProjects(OFFICIAL_VIP_CATALOG);
     if (isSupabaseConfigured && supabase) {
       await sbAdminSyncOfficialCatalog();
-      await refreshSupabaseState(userProfile, sbUser?.email);
+      await refreshSupabaseState(userProfile, sbUser?.email, true);
       return;
     }
     if (!firebaseUser) return;
@@ -1959,7 +1966,7 @@ export default function App() {
   ) => {
     if (isSupabaseConfigured && supabase) {
       await sbAdminProcessTransaction(tx.id, nextStatus);
-      await refreshSupabaseState(userProfile, sbUser?.email);
+      await refreshSupabaseState(userProfile, sbUser?.email, true);
       return;
     }
     const accounts = loadAccounts();
@@ -2023,27 +2030,33 @@ export default function App() {
     delta: number,
     reason: string
   ) => {
+    const roundedDelta = Math.round(delta);
+    if (!Number.isFinite(roundedDelta) || roundedDelta === 0) {
+      throw new Error('Veuillez saisir un montant valide différent de 0.');
+    }
     if (isSupabaseConfigured && supabase) {
-      await sbAdminAdjustBalance(targetUser.uid, Math.round(delta), reason);
-      await refreshSupabaseState(userProfile, sbUser?.email);
+      await sbAdminAdjustBalance(targetUser.uid, roundedDelta, reason);
+      await refreshSupabaseState(userProfile, sbUser?.email, true);
       return;
     }
-    const nextBalance = Math.max(0, Math.round(targetUser.balance + delta));
+    const nextBalance = Math.max(0, Math.round(targetUser.balance + roundedDelta));
     const txId = sanitizeId(`tx_cred_${Date.now()}_${targetUser.uid.slice(0, 6)}`);
     const nowIso = new Date().toISOString();
+    let updatedAny = false;
 
     const accounts = loadAccounts();
     const acc = Object.values(accounts).find((a) => a.profile.uid === targetUser.uid);
     if (acc) {
+      updatedAny = true;
       const tx: TransactionItem = {
         id: txId,
         userId: sanitizeId(targetUser.uid),
         userName: clampStr(targetUser.displayName, 1, 100),
         type: 'credit',
-        amount: Math.abs(Math.round(delta)),
-        method: 'Crédit Administrateur',
+        amount: Math.abs(roundedDelta),
+        method: roundedDelta < 0 ? 'Ajustement Administrateur' : 'Crédit Administrateur',
         phoneOrAccount: targetUser.referralCode || targetUser.phone,
-        reference: clampStr(reason || 'Crédit ajouté au compte', 2, 100),
+        reference: clampStr(reason || 'Ajustement du solde par administration', 2, 100),
         status: 'completed',
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -2066,6 +2079,7 @@ export default function App() {
       try {
         const uSnap = await getDoc(doc(db, 'users', targetUser.uid));
         if (uSnap.exists() || !acc) {
+          updatedAny = true;
           await updateDoc(doc(db, 'users', targetUser.uid), {
             balance: nextBalance,
             updatedAt: serverTimestamp(),
@@ -2075,10 +2089,10 @@ export default function App() {
             userId: sanitizeId(targetUser.uid),
             userName: clampStr(targetUser.displayName, 1, 100),
             type: 'credit',
-            amount: Math.abs(Math.round(delta)),
-            method: 'Crédit Administrateur',
+            amount: Math.abs(roundedDelta),
+            method: roundedDelta < 0 ? 'Ajustement Administrateur' : 'Crédit Administrateur',
             phoneOrAccount: targetUser.referralCode || targetUser.email,
-            reference: clampStr(reason || 'Crédit ajouté au compte', 2, 100),
+            reference: clampStr(reason || 'Ajustement du solde par administration', 2, 100),
             status: 'completed',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -2087,6 +2101,10 @@ export default function App() {
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, `users/${targetUser.uid}`);
       }
+    }
+
+    if (!updatedAny) {
+      throw new Error('Compte utilisateur introuvable pour appliquer cette modification.');
     }
   };
 
@@ -2099,7 +2117,7 @@ export default function App() {
     const qty = Math.max(1, Math.min(20, Math.round(quantity)));
     if (isSupabaseConfigured && supabase) {
       await sbAdminGiftProduct(targetUser.uid, project.id, qty, reason);
-      await refreshSupabaseState(userProfile, sbUser?.email);
+      await refreshSupabaseState(userProfile, sbUser?.email, true);
       return;
     }
     const unitPrice = Math.max(500, Math.round(project.minInvestment));
@@ -3576,7 +3594,7 @@ export default function App() {
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-xs sm:text-sm font-bold text-[#0F172A] uppercase truncate">
                       {(userProfile?.withdrawalMethod || wdMethod || 'ORANGE MONEY')
-                        .replace(/Burkina|Bénin|Cameroun|Sénégal|Togo/gi, '')
+                        .replace(/Burkina|Bénin|Cameroun|Côte d['’]Ivoire|Sénégal|Togo/gi, '')
                         .trim() || 'MOBILE MONEY'}
                     </p>
                     <p className="text-[11px] sm:text-xs text-[#475569] truncate">

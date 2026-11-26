@@ -45,6 +45,17 @@ export const COUNTRY_OPTIONS: CountryOption[] = [
     methods: ['Orange Money Burkina', 'Moov Money Burkina', 'Wave Burkina', 'Virement Bancaire'],
   },
   {
+    country: "Côte d'Ivoire",
+    dialCode: '+225',
+    methods: [
+      "Orange Money Côte d'Ivoire",
+      "MTN MoMo Côte d'Ivoire",
+      "Moov Money Côte d'Ivoire",
+      "Wave Côte d'Ivoire",
+      'Virement Bancaire',
+    ],
+  },
+  {
     country: 'Sénégal',
     dialCode: '+221',
     methods: ['Wave Sénégal', 'Orange Money Sénégal', 'Free Money', 'Virement Bancaire'],
@@ -80,7 +91,7 @@ export function validateEligiblePhone(
     return {
       ok: false,
       error:
-        'Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, le Sénégal et le Togo sont autorisés.',
+        "Pays non éligible. Seuls le Bénin, le Cameroun, le Burkina Faso, la Côte d'Ivoire, le Sénégal et le Togo sont autorisés.",
     };
   }
 
@@ -93,7 +104,7 @@ export function validateEligiblePhone(
       return {
         ok: false,
         error:
-          'Indicatif non éligible. Seuls le Bénin (+229), le Cameroun (+237), le Burkina Faso (+226), le Sénégal (+221) et le Togo (+228) sont autorisés.',
+          "Indicatif non éligible. Seuls le Bénin (+229), le Cameroun (+237), le Burkina Faso (+226), la Côte d'Ivoire (+225), le Sénégal (+221) et le Togo (+228) sont autorisés.",
       };
     }
   }
@@ -121,12 +132,12 @@ export function validateEligiblePhone(
 
 export const PAYMENT_CHANNELS = [
   {
-    id: 'Mobile Money (Bénin · Burkina Faso · Togo)',
-    label: 'Mobile Money (Bénin · Burkina Faso · Togo)',
+    id: "Mobile Money (Bénin · Burkina Faso · Côte d'Ivoire · Togo)",
+    label: "Mobile Money (Bénin · Burkina Faso · Côte d'Ivoire · Togo)",
   },
   {
-    id: 'Mobile Money & Wave (Cameroun · Sénégal)',
-    label: 'Mobile Money & Wave (Cameroun · Sénégal)',
+    id: "Mobile Money & Wave (Cameroun · Côte d'Ivoire · Sénégal)",
+    label: "Mobile Money & Wave (Cameroun · Côte d'Ivoire · Sénégal)",
   },
 ];
 
