@@ -87,7 +87,7 @@ VALUES
   ('VIPBONUS', 10, 100, 5000, true)
 ON CONFLICT (code) DO NOTHING;
 
--- 4. RPC atomique : Pointage quotidien 30 F CFA toutes les 24h (aucun double crédit possible)
+-- 4. RPC atomique : Pointage quotidien 30 F CFA renouvelé chaque jour à 00h00 UTC (aucun double crédit possible)
 CREATE OR REPLACE FUNCTION public.claim_daily_checkin()
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -98,6 +98,8 @@ DECLARE
   v_me public.profiles%ROWTYPE;
   v_next_day integer;
   v_now timestamptz := now();
+  v_today date := (v_now AT TIME ZONE 'UTC')::date;
+  v_last_day date;
   v_tx_id text;
   v_inserted_id text;
   v_remaining interval;
@@ -113,15 +115,18 @@ BEGIN
     RAISE EXCEPTION 'Profil utilisateur introuvable.';
   END IF;
 
-  IF v_me.last_checkin_at IS NOT NULL AND v_me.last_checkin_at > (v_now - interval '24 hours') THEN
-    v_remaining := (v_me.last_checkin_at + interval '24 hours') - v_now;
-    v_hours := GREATEST(0, floor(extract(epoch FROM v_remaining) / 3600)::integer);
-    v_mins := GREATEST(0, floor((extract(epoch FROM v_remaining)::bigint % 3600) / 60)::integer);
-    RAISE EXCEPTION 'Bonus quotidien déjà réclamé. Revenez dans %h %m.', v_hours, v_mins;
+  IF v_me.last_checkin_at IS NOT NULL THEN
+    v_last_day := (v_me.last_checkin_at AT TIME ZONE 'UTC')::date;
+    IF v_last_day >= v_today THEN
+      v_remaining := (((v_today + 1)::timestamp) AT TIME ZONE 'UTC') - v_now;
+      v_hours := GREATEST(0, floor(extract(epoch FROM v_remaining) / 3600)::integer);
+      v_mins := GREATEST(0, floor((extract(epoch FROM v_remaining)::bigint % 3600) / 60)::integer);
+      RAISE EXCEPTION 'Pointage déjà effectué aujourd''hui. Renouvellement à 00h00 (dans %h %m).', v_hours, v_mins;
+    END IF;
   END IF;
 
   v_next_day := COALESCE(v_me.checkin_days, 0) + 1;
-  v_tx_id := 'tx_checkin_' || v_me.uid || '_d' || v_next_day::text;
+  v_tx_id := 'tx_checkin_' || v_me.uid || '_' || to_char(v_today, 'YYYYMMDD');
 
   INSERT INTO public.transactions (
     id, user_id, user_name, type, amount, method, phone_or_account, reference, status
@@ -131,7 +136,7 @@ BEGIN
     v_me.display_name,
     'credit',
     30,
-    'Pointage quotidien 24h',
+    'Pointage quotidien',
     COALESCE(NULLIF(v_me.phone, ''), v_me.email),
     'Bonus de connexion quotidien (Jour ' || v_next_day::text || ')',
     'completed'
@@ -140,7 +145,7 @@ BEGIN
   RETURNING id INTO v_inserted_id;
 
   IF v_inserted_id IS NULL THEN
-    RAISE EXCEPTION 'Pointage déjà enregistré pour ce cycle de 24 heures.';
+    RAISE EXCEPTION 'Pointage déjà enregistré pour aujourd''hui. Renouvellement à 00h00.';
   END IF;
 
   PERFORM set_config('app.allow_financial_write', '1', true);

@@ -49,7 +49,6 @@ import {
   BRAND_IMAGES,
   COUNTRY_OPTIONS,
   DAILY_CHECKIN_BONUS_CFA,
-  DAILY_CHECKIN_COOLDOWN_MS,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PHONE,
   DEFAULT_GIFT_CODES,
@@ -312,6 +311,16 @@ function formatCountdownHhMm(ms: number): string {
   const hrs = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
   return `${hrs}h ${String(mins).padStart(2, '0')}m`;
+}
+
+function getUtcDayKey(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+function getMsUntilNextMidnightUtc(ms: number): number {
+  const d = new Date(ms);
+  const nextMidnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 0, 0, 0);
+  return Math.max(0, nextMidnight - ms);
 }
 
 function transactionTypeLabel(type: TransactionType): string {
@@ -2016,11 +2025,11 @@ export default function App() {
     }
   };
 
-  // Daily check-in (Pointage 30 F CFA / 24h, strictly no double credit)
+  // Daily check-in (Pointage 30 F CFA / jour, renouvellement chaque 00h00 UTC sans double crédit)
   useEffect(() => {
     if (activeTab !== 'checkin') return;
     setCheckinNowMs(Date.now());
-    const id = window.setInterval(() => setCheckinNowMs(Date.now()), 30000);
+    const id = window.setInterval(() => setCheckinNowMs(Date.now()), 15000);
     return () => window.clearInterval(id);
   }, [activeTab]);
 
@@ -2031,7 +2040,7 @@ export default function App() {
       if (!Number.isNaN(parsed)) best = Math.max(best, parsed);
     }
     transactions.forEach((tx) => {
-      if (tx.id.startsWith('tx_checkin_') || tx.method === 'Pointage quotidien 24h') {
+      if (tx.id.startsWith('tx_checkin_') || tx.method.startsWith('Pointage quotidien')) {
         const raw = tx.createdAt as { toMillis?: () => number } | string | undefined;
         if (raw && typeof raw === 'object' && typeof raw.toMillis === 'function') {
           best = Math.max(best, raw.toMillis());
@@ -2044,10 +2053,18 @@ export default function App() {
     return best;
   }, [userProfile?.lastCheckinAt, transactions]);
 
-  const checkinRemainingMs =
-    lastCheckinMs > 0
-      ? Math.max(0, lastCheckinMs + DAILY_CHECKIN_COOLDOWN_MS - checkinNowMs)
-      : 0;
+  const todayUtcKey = getUtcDayKey(checkinNowMs);
+  const todayCheckinTxId = userProfile
+    ? sanitizeId(`tx_checkin_${userProfile.uid}_${todayUtcKey}`)
+    : '';
+
+  const alreadyCheckedInToday = Boolean(
+    userProfile &&
+      ((lastCheckinMs > 0 && getUtcDayKey(lastCheckinMs) === todayUtcKey) ||
+        transactions.some((tx) => tx.id === todayCheckinTxId))
+  );
+
+  const checkinRemainingMs = alreadyCheckedInToday ? getMsUntilNextMidnightUtc(checkinNowMs) : 0;
 
   const handleClaimDailyCheckin = async () => {
     if (!userProfile || checkinLockRef.current || claimingCheckin) return;
@@ -2056,9 +2073,17 @@ export default function App() {
     try {
       const nowMs = Date.now();
       setCheckinNowMs(nowMs);
-      if (lastCheckinMs > 0 && nowMs - lastCheckinMs < DAILY_CHECKIN_COOLDOWN_MS) {
-        const left = lastCheckinMs + DAILY_CHECKIN_COOLDOWN_MS - nowMs;
-        showToast(`Pointage déjà effectué. Revenez dans ${formatCountdownHhMm(left)}.`);
+      const currentDayKey = getUtcDayKey(nowMs);
+      const txId = sanitizeId(`tx_checkin_${userProfile.uid}_${currentDayKey}`);
+
+      if (
+        (lastCheckinMs > 0 && getUtcDayKey(lastCheckinMs) === currentDayKey) ||
+        transactions.some((tx) => tx.id === txId)
+      ) {
+        const left = getMsUntilNextMidnightUtc(nowMs);
+        showToast(
+          `Pointage déjà effectué aujourd'hui. Renouvellement à 00h00 (dans ${formatCountdownHhMm(left)}).`
+        );
         return;
       }
 
@@ -2076,7 +2101,7 @@ export default function App() {
             : prev
         );
         await refreshSupabaseState(userProfile, sbUser?.email, true);
-        showToast(`+${formatCFA(res.amount)} crédités ! Pointage validé pour 24h.`);
+        showToast(`+${formatCFA(res.amount)} crédités ! Prochain pointage dès 00h00.`);
         return;
       }
 
@@ -2084,22 +2109,21 @@ export default function App() {
       const nextDays = Math.max(0, Math.round(userProfile.checkinDays || 0)) + 1;
       const nextTotal =
         Math.max(0, Math.round(userProfile.checkinTotal || 0)) + DAILY_CHECKIN_BONUS_CFA;
-      const txId = sanitizeId(`tx_checkin_${userProfile.uid}_d${nextDays}`);
 
       if (!firebaseUser && phoneSessionKey) {
         const accounts = loadAccounts();
         const rec = accounts[phoneSessionKey];
         if (!rec) throw new Error('Session introuvable.');
         const existingLast = rec.profile.lastCheckinAt ? Date.parse(rec.profile.lastCheckinAt) : 0;
-        if (existingLast > 0 && nowMs - existingLast < DAILY_CHECKIN_COOLDOWN_MS) {
+        if (existingLast > 0 && getUtcDayKey(existingLast) === currentDayKey) {
           throw new Error(
-            `Pointage déjà effectué. Prochain pointage dans ${formatCountdownHhMm(
-              existingLast + DAILY_CHECKIN_COOLDOWN_MS - nowMs
-            )}.`
+            `Pointage déjà effectué aujourd'hui. Renouvellement à 00h00 (dans ${formatCountdownHhMm(
+              getMsUntilNextMidnightUtc(nowMs)
+            )}).`
           );
         }
         if ((rec.transactions || []).some((t) => t.id === txId)) {
-          throw new Error('Récompense déjà créditée pour ce cycle.');
+          throw new Error("Pointage déjà effectué aujourd'hui. Renouvellement à 00h00.");
         }
 
         const checkinTx: TransactionItem = {
@@ -2108,7 +2132,7 @@ export default function App() {
           userName: userProfile.displayName,
           type: 'credit',
           amount: DAILY_CHECKIN_BONUS_CFA,
-          method: 'Pointage quotidien 24h',
+          method: 'Pointage quotidien',
           phoneOrAccount: userProfile.phone || userProfile.referralCode,
           reference: clampStr(`Bonus connexion quotidienne · Jour ${nextDays}`, 2, 100),
           status: 'completed',
@@ -2128,7 +2152,7 @@ export default function App() {
           transactions: [checkinTx, ...(cur.transactions || [])],
         }));
         showToast(
-          `+${formatCFA(DAILY_CHECKIN_BONUS_CFA)} crédités ! Pointage validé pour 24h.`
+          `+${formatCFA(DAILY_CHECKIN_BONUS_CFA)} crédités ! Prochain pointage dès 00h00.`
         );
         return;
       }
@@ -2136,7 +2160,7 @@ export default function App() {
       if (firebaseUser) {
         const existingTx = await getDoc(doc(db, 'transactions', txId));
         if (existingTx.exists()) {
-          throw new Error('Récompense déjà créditée pour ce cycle.');
+          throw new Error("Pointage déjà effectué aujourd'hui. Renouvellement à 00h00.");
         }
         await setDoc(doc(db, 'transactions', txId), {
           id: txId,
@@ -2144,7 +2168,7 @@ export default function App() {
           userName: clampStr(userProfile.displayName, 1, 100),
           type: 'credit',
           amount: DAILY_CHECKIN_BONUS_CFA,
-          method: 'Pointage quotidien 24h',
+          method: 'Pointage quotidien',
           phoneOrAccount: userProfile.phone || userProfile.referralCode,
           reference: clampStr(`Bonus connexion quotidienne · Jour ${nextDays}`, 2, 100),
           status: 'completed',
@@ -2159,7 +2183,7 @@ export default function App() {
           updatedAt: serverTimestamp(),
         });
         showToast(
-          `+${formatCFA(DAILY_CHECKIN_BONUS_CFA)} crédités ! Pointage validé pour 24h.`
+          `+${formatCFA(DAILY_CHECKIN_BONUS_CFA)} crédités ! Prochain pointage dès 00h00.`
         );
       }
     } catch (err) {
@@ -3498,28 +3522,25 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => void handleClaimDailyCheckin()}
-                  disabled={claimingCheckin || checkinRemainingMs > 0}
+                  disabled={claimingCheckin || alreadyCheckedInToday}
                   className={`mt-3 min-h-[46px] px-6 rounded-md text-xs sm:text-sm font-medium transition-all shrink-0 ${
-                    checkinRemainingMs > 0
+                    alreadyCheckedInToday
                       ? 'bg-[#E5E7EB] text-[#6B7280] cursor-not-allowed'
                       : 'aurelia-gold-btn cursor-pointer disabled:opacity-60'
                   }`}
                 >
                   {claimingCheckin
                     ? 'Validation...'
-                    : checkinRemainingMs > 0
-                    ? `Dans ${formatCountdownHhMm(checkinRemainingMs)}`
+                    : alreadyCheckedInToday
+                    ? `À 00h00 (${formatCountdownHhMm(checkinRemainingMs)})`
                     : 'Pointer (+30 FCFA)'}
                 </button>
               </div>
 
               <div className="pt-2 space-y-1.5 text-xs sm:text-[13px] text-[#4B5563] leading-relaxed">
                 <p>1. Récompense de connexion quotidienne : {formatCFA(DAILY_CHECKIN_BONUS_CFA)}.</p>
-                <p>2. Connectez-vous et pointez une fois toutes les 24 heures.</p>
-                <p>
-                  3. Pas de double crédit : votre compte est crédité une seule fois par cycle de
-                  24h.
-                </p>
+                <p>2. Le pointage se renouvelle chaque jour à 00h00 (minuit).</p>
+                <p>3. Pas de double crédit : une seule validation autorisée par journée.</p>
               </div>
             </section>
 
