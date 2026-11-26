@@ -950,7 +950,7 @@ export function ReferralModal({
   if (!isOpen) return null;
 
   const inviteUrl = userProfile
-    ? `${window.location.origin}/?ref=${userProfile.uid}&code=${userProfile.referralCode}`
+    ? `${window.location.origin}/?code=${encodeURIComponent(userProfile.referralCode)}`
     : `${window.location.origin}/`;
 
   const copyInviteUrl = async () => {

@@ -455,3 +455,41 @@ export function phonesMatch(phoneA?: string, phoneB?: string): boolean {
     (b.length >= 8 && a.endsWith(b))
   );
 }
+
+export function generateOpaqueReferralCode(avoidPhoneOrUid?: string): string {
+  const avoidDigits = (avoidPhoneOrUid || '').replace(/\D/g, '');
+  const forbidden = new Set<string>();
+  if (avoidDigits.length >= 6) {
+    for (let i = 0; i <= avoidDigits.length - 6; i++) {
+      forbidden.add(avoidDigits.slice(i, i + 6));
+    }
+  }
+
+  for (let attempt = 0; attempt < 25; attempt++) {
+    let num = 100000 + Math.floor(Math.random() * 900000);
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const arr = new Uint32Array(1);
+      crypto.getRandomValues(arr);
+      num = 100000 + (arr[0] % 900000);
+    }
+    const digits = String(num);
+    if (!forbidden.has(digits)) {
+      return `AM-${digits}`;
+    }
+  }
+  return `AM-${100000 + Math.floor(Math.random() * 900000)}`;
+}
+
+export function isPhoneDerivedReferralCode(
+  code?: string | null,
+  phoneOrUid?: string | null
+): boolean {
+  const cleanCode = (code || '').trim().toUpperCase();
+  if (!cleanCode) return false;
+  if (/^AM-[A-Z]{6}$/.test(cleanCode)) return true;
+  const phoneDigits = (phoneOrUid || '').replace(/\D/g, '');
+  if (!phoneDigits) return false;
+  const legacyCode = `AM-${phoneDigits.slice(-6).padStart(6, '0')}`;
+  return cleanCode === legacyCode;
+}
+

@@ -65,8 +65,10 @@ import {
   computeInvestmentMetrics,
   formatCFA,
   formatDateFr,
+  generateOpaqueReferralCode,
   getProjectDailyIncome,
   isEligibleCountry,
+  isPhoneDerivedReferralCode,
   sanitizeId,
   validateEligiblePhone,
 } from './data/catalog';
@@ -196,6 +198,52 @@ function loadAccounts(): Record<string, PhoneAccountRecord> {
           changed = true;
         }
       });
+      if (changed) {
+        localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(parsed));
+      }
+    }
+    const opaqueMigratedKey = 'aurelia_mobile_opaque_ref_v2';
+    if (!localStorage.getItem(opaqueMigratedKey)) {
+      localStorage.setItem(opaqueMigratedKey, '1');
+      const codeMap: Record<string, string> = {};
+      const usedCodes = new Set<string>();
+      Object.values(parsed).forEach((acc) => {
+        if (
+          acc.profile?.referralCode &&
+          !isPhoneDerivedReferralCode(acc.profile.referralCode, acc.profile.phone || acc.profile.uid)
+        ) {
+          usedCodes.add(acc.profile.referralCode.toUpperCase());
+        }
+      });
+      let changed = false;
+      Object.entries(parsed).forEach(([k, acc]) => {
+        const oldCode = acc.profile?.referralCode || '';
+        const phoneOrUid = acc.profile?.phone || acc.profile?.uid;
+        if (isPhoneDerivedReferralCode(oldCode, phoneOrUid)) {
+          let nextCode = generateOpaqueReferralCode(phoneOrUid);
+          while (usedCodes.has(nextCode.toUpperCase())) {
+            nextCode = generateOpaqueReferralCode(phoneOrUid);
+          }
+          usedCodes.add(nextCode.toUpperCase());
+          codeMap[oldCode.toUpperCase()] = nextCode;
+          parsed[k] = {
+            ...acc,
+            profile: { ...acc.profile, referralCode: nextCode },
+          };
+          changed = true;
+        }
+      });
+      if (Object.keys(codeMap).length > 0) {
+        Object.entries(parsed).forEach(([k, acc]) => {
+          const refBy = (acc.profile?.referredBy || '').toUpperCase();
+          if (refBy && codeMap[refBy]) {
+            parsed[k] = {
+              ...acc,
+              profile: { ...acc.profile, referredBy: codeMap[refBy] },
+            };
+          }
+        });
+      }
       if (changed) {
         localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(parsed));
       }
@@ -648,9 +696,15 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref');
     const code = params.get('code');
-    if (ref) localStorage.setItem(REF_UID_KEY, sanitizeId(ref));
-    if (code) setInitialInviteCode(sanitizeId(code));
-    else if (ref) setInitialInviteCode(sanitizeId(ref));
+    if (code) {
+      const cleanCode = sanitizeId(code.toUpperCase());
+      localStorage.setItem(REF_UID_KEY, cleanCode);
+      setInitialInviteCode(cleanCode);
+    } else if (ref) {
+      const cleanRef = sanitizeId(ref);
+      localStorage.setItem(REF_UID_KEY, cleanRef);
+      setInitialInviteCode(cleanRef);
+    }
 
     const returnToken = params.get('token');
     const depositReturn = params.get('deposit_return');
@@ -818,7 +872,7 @@ export default function App() {
       if (!snap.exists()) {
         const refIdRaw = localStorage.getItem(REF_UID_KEY) || '';
         const referrerUid = refIdRaw && refIdRaw !== fbUser.uid ? sanitizeId(refIdRaw) : '';
-        const code = `AM-${fbUser.uid.slice(0, 6).toUpperCase()}`;
+        const code = generateOpaqueReferralCode();
         await setDoc(userRef, {
           uid: sanitizeId(fbUser.uid),
           email: clampStr(fbUser.email || 'membre@aureliamobile.africa', 3, 254),
@@ -1186,9 +1240,7 @@ export default function App() {
         throw new Error('Ce numéro de téléphone est déjà inscrit. Veuillez vous connecter.');
       }
       const nowIso = new Date().toISOString();
-      const referralCode = sanitizeId(
-        `AM-${cleanPhone.replace(/\D/g, '').slice(-6).padStart(6, '0')}`
-      );
+      const referralCode = sanitizeId(generateOpaqueReferralCode(cleanPhone));
       const rawInvite = payload.invitationCode.trim();
       const referredBy = rawInvite
         ? sanitizeId(rawInvite.toUpperCase())
@@ -1333,9 +1385,7 @@ export default function App() {
     // Auto-create local profile on first sign-in (only user role unless unique admin verified above)
     const nowIso = new Date().toISOString();
     const uid = sanitizeId(`usr_${dialCode.replace(/\D/g, '')}_${cleanPhone.replace(/\D/g, '')}`);
-    const referralCode = sanitizeId(
-      `AM-${cleanPhone.replace(/\D/g, '').slice(-6).padStart(6, '0')}`
-    );
+    const referralCode = sanitizeId(generateOpaqueReferralCode(cleanPhone));
     const createdProfile: UserProfile = {
       uid,
       email: `${dialCode.replace(/\D/g, '')}${cleanPhone.replace(/\D/g, '')}@aureliamobile.africa`,
@@ -3930,8 +3980,8 @@ export default function App() {
                 {(() => {
                   const code = userProfile?.referralCode || 'AM-INVITE';
                   const link = userProfile
-                    ? `${window.location.origin}/?ref=${userProfile.uid}&code=${userProfile.referralCode}`
-                    : `${window.location.origin}/?ref=AM-INVITE`;
+                    ? `${window.location.origin}/?code=${encodeURIComponent(code)}`
+                    : `${window.location.origin}/`;
                   return (
                     <section className="rounded-2xl overflow-hidden bg-white border border-[#EAECEF] shadow-2xs">
                       <div className="relative h-52 sm:h-64 w-full bg-[#111827]">

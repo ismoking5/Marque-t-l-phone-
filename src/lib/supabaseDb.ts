@@ -6,7 +6,9 @@ import {
   DEFAULT_SETTINGS,
   OFFICIAL_VIP_CATALOG,
   clampStr,
+  generateOpaqueReferralCode,
   isEligibleCountry,
+  isPhoneDerivedReferralCode,
   sanitizeId,
   validateEligiblePhone,
 } from '../data/catalog';
@@ -304,7 +306,17 @@ export async function sbEnsureProfileForAuthUser(
           .eq('auth_uid', authUid)
           .maybeSingle();
         if (refreshed.data) {
-          return mapProfileRow(refreshed.data as Record<string, unknown>);
+          Object.assign(profile, mapProfileRow(refreshed.data as Record<string, unknown>));
+        }
+      }
+      if (isPhoneDerivedReferralCode(profile.referralCode, profile.phone || profile.uid)) {
+        try {
+          const rotRes = await supabase.rpc('ensure_opaque_referral_code');
+          if (!rotRes.error && typeof rotRes.data === 'string' && rotRes.data.trim()) {
+            profile.referralCode = rotRes.data.trim();
+          }
+        } catch {
+          // ignore if migration not yet applied
         }
       }
       return profile;
@@ -319,12 +331,14 @@ export async function sbEnsureProfileForAuthUser(
     const uid = digitsFromEmail
       ? sanitizeId(`usr_${digitsFromEmail}`)
       : sanitizeId(`usr_${authUid.replace(/-/g, '').slice(0, 16)}`);
-    const baseReferralCode =
-      opts?.referralCode ||
-      metaRefCode ||
-      sanitizeId(
-        `AM-${(digitsFromEmail || authUid.replace(/[^a-zA-Z0-9]/g, '')).slice(-6).toUpperCase().padStart(6, '0')}`
-      );
+    const candidateRef =
+      (opts?.referralCode && !isPhoneDerivedReferralCode(opts.referralCode, cleanPhone || uid)
+        ? opts.referralCode
+        : '') ||
+      (metaRefCode && !isPhoneDerivedReferralCode(metaRefCode, cleanPhone || uid)
+        ? metaRefCode
+        : '');
+    const baseReferralCode = sanitizeId(candidateRef || generateOpaqueReferralCode(cleanPhone || uid));
     const country = opts?.country || metaCountry || 'Burkina Faso';
     const defaultMethod =
       COUNTRY_OPTIONS.find((c) => c.country === country)?.methods[0] || 'Orange Money Burkina';
@@ -363,9 +377,7 @@ export async function sbEnsureProfileForAuthUser(
       if (retryExisting.data) {
         profileRow = retryExisting.data as Record<string, unknown>;
       } else {
-        const uniqueReferralCode = sanitizeId(
-          `AM-${(digitsFromEmail || '000000').slice(-6).toUpperCase()}-${authUid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase()}`
-        );
+        const uniqueReferralCode = sanitizeId(generateOpaqueReferralCode(cleanPhone || uid));
         const retryInsert = await supabase
           .from('profiles')
           .insert(buildPayload(uniqueReferralCode))
@@ -428,9 +440,7 @@ export async function sbPhoneAuth(payload: PhoneAuthPayload): Promise<UserProfil
   const fullPhone = phoneCheck.fullPhone;
   const isAdminCredential = isUniqueAdminPhone(fullPhone);
   const email = phoneToAuthEmail(dialCode, cleanPhone);
-  const referralCode = sanitizeId(
-    `AM-${cleanPhone.replace(/\D/g, '').slice(-6).padStart(6, '0')}`
-  );
+  const referralCode = sanitizeId(generateOpaqueReferralCode(cleanPhone));
   const rawInvite = payload.invitationCode.trim();
   const referredBy = rawInvite ? sanitizeId(rawInvite.toUpperCase()) : '';
 
