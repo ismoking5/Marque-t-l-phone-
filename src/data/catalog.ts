@@ -153,10 +153,11 @@ export const PAYMENT_CHANNELS = [
 export const QUICK_DEPOSIT_AMOUNTS = [5000, 10000, 15000, 60000];
 
 export const TELEGRAM_GROUP_URL = 'https://t.me/+Xea73bzqWsRjYTM0';
+export const TELEGRAM_CHANNEL_URL = 'https://t.me/+o6rVaewJsjIwOGU0';
 
 export const SUPPORT_CHANNELS = [
   { id: 'telegram_support', label: 'Telegram', href: TELEGRAM_GROUP_URL },
-  { id: 'telegram_channel', label: 'Chaîne Telegram', href: TELEGRAM_GROUP_URL },
+  { id: 'telegram_channel', label: 'Chaîne Telegram', href: TELEGRAM_CHANNEL_URL },
   { id: 'telegram_group', label: 'Groupe Telegram', href: TELEGRAM_GROUP_URL },
 ];
 
